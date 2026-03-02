@@ -5,7 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { adminApi } from '../../api/admin.api';
-import { useDomains } from '../../hooks/useDomains';
+import { useDomains, invalidateDomainsCache } from '../../hooks/useDomains';
 import { buildDomainPayload, buildQuestionPayload } from '../../services/admin.service';
 import {
   GraduationCapIcon,
@@ -55,7 +55,7 @@ function AdminDashboard() {
       case 'assessments':
         return <AdminAssessmentsSection />;
       case 'domains':
-        return <AdminDomainsSection />;
+        return <AdminDomainsSection onDomainsChanged={invalidateDomainsCache} />;
       case 'projects':
         return <AdminProjectsPlaceholder />;
       case 'reports':
@@ -334,7 +334,7 @@ function AdminUsersSection() {
   );
 }
 
-function AdminDomainsSection() {
+function AdminDomainsSection({ onDomainsChanged }) {
   const [domains, setDomains] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -398,6 +398,7 @@ function AdminDomainsSection() {
       }
       closeModal();
       await loadDomains(domainPage);
+      onDomainsChanged?.();
     } catch (err) {
       setError(err.response?.data?.detail || (typeof err.response?.data === 'object' ? JSON.stringify(err.response.data) : err.message));
     } finally {
@@ -411,6 +412,7 @@ function AdminDomainsSection() {
       await adminApi.deleteDomain(d.id);
       if (editingDomain?.id === d.id) closeModal();
       await loadDomains(domainPage);
+      onDomainsChanged?.();
     } catch (err) {
       setError(err.response?.data?.detail || err.message || 'Failed to delete domain');
     }

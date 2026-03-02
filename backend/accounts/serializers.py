@@ -196,7 +196,8 @@ class CreateAdministratorSerializer(serializers.Serializer):
         user = User.objects.create_user(role='ADMINISTRATOR', password=password, **validated_data)
         user.is_staff = True   # can log in to Django /admin/
         user.is_superuser = False  # admin role, not super admin
-        user.save(update_fields=['is_staff', 'is_superuser'])
+        user.is_email_verified = True  # admins created by superuser are treated as verified
+        user.save(update_fields=['is_staff', 'is_superuser', 'is_email_verified'])
         return user
 
     def to_representation(self, instance):

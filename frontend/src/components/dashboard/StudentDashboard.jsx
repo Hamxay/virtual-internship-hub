@@ -71,7 +71,7 @@ function AssessmentStartScreen({ onStart, onBack, attemptCount, maxAttempts }) {
           <FileTextIcon className="w-5 h-5 quiz-start-row-icon" />
           <div>
             <h3>Questions</h3>
-            <p>15–20 multiple choice questions covering key concepts</p>
+            <p>20 to 30 multiple choice questions covering key concepts</p>
           </div>
         </div>
         <div className="quiz-start-row">
@@ -388,14 +388,16 @@ function StudentDashboard() {
         setAttemptCountToday(todayCount);
         const passed = list.some((a) => (a.score / (a.total_points || 1)) * 100 >= 70);
         setAssessmentPassed(passed);
+        // Always keep latest attempt so we can show "previous recommendation" when user changed domains
         if (list.length > 0) setLastAttempt(list[0]);
       })
       .catch(() => {});
   };
 
+  const targetDomainKey = (user?.student_profile?.target_domains ?? []).map((d) => d.id).sort().join(',');
   useEffect(() => {
     loadAttempts();
-  }, []);
+  }, [targetDomainKey]);
 
   const handleLogout = async () => {
     await logout();
@@ -535,7 +537,10 @@ function StudentDashboard() {
         />
       );
     }
-    switch (activeView) {
+    const lastAttemptTargetIds = (lastAttempt?.test_domains ?? []).map((d) => d.id).sort().join(',');
+        const hasRecommendationForCurrentDomains = Boolean(lastAttempt?.recommended_domains?.[0] && lastAttemptTargetIds === targetDomainKey);
+
+        switch (activeView) {
       case 'dashboard':
         return (
           <StudentDashboardHome
@@ -543,6 +548,7 @@ function StudentDashboard() {
             targetDomains={targetDomains}
             assessmentPassed={assessmentPassed}
             lastAttempt={lastAttempt}
+            hasRecommendationForCurrentDomains={hasRecommendationForCurrentDomains}
             attemptCount={attemptCountToday}
             attemptCountLabel="used today"
             maxAttemptsPerDay={2}
@@ -616,6 +622,7 @@ function StudentDashboard() {
             targetDomains={targetDomains}
             assessmentPassed={assessmentPassed}
             lastAttempt={lastAttempt}
+            hasRecommendationForCurrentDomains={hasRecommendationForCurrentDomains}
             attemptCount={attemptCountToday}
             attemptCountLabel="used today"
             maxAttemptsPerDay={2}
@@ -707,22 +714,42 @@ function StudentDashboard() {
   );
 }
 
-function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, lastAttempt, attemptCount, attemptCountLabel = 'used', maxAttemptsPerDay = 2, tasksCompleted = 0, onStartAssessment, assessmentError }) {
+function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, lastAttempt, hasRecommendationForCurrentDomains = false, attemptCount, attemptCountLabel = 'used', maxAttemptsPerDay = 2, tasksCompleted = 0, onStartAssessment, assessmentError }) {
   const recommendedDomain = lastAttempt?.recommended_domains?.[0];
+  const previousRecommendation = !hasRecommendationForCurrentDomains && lastAttempt?.recommended_domains?.[0];
 
   return (
     <div className="dashboard-section">
-      {/* Welcome card */}
+      {/* Welcome card – separate target domains (chosen) vs recommended domain (from assessment) */}
       <div className="welcome-card">
         <h2>Welcome back, {studentName}!</h2>
         <p>
-          {assessmentPassed ? 'Great job on passing your assessment. Check out your recommended tasks below.' : 'Complete your skill assessment to unlock personalized tasks and get a domain recommendation.'}
+          {hasRecommendationForCurrentDomains
+            ? 'Great job on passing your assessment. Check out your recommended tasks below.'
+            : assessmentPassed
+              ? 'Take the assessment again for your current target domains to get a new recommendation.'
+              : 'Complete your skill assessment to unlock personalized tasks and get a domain recommendation.'}
         </p>
-        {targetDomains.length > 0 && (
-          <div className="domain-tags">
-            {targetDomains.map((d, i) => (
-              <span key={i}>{d}</span>
-            ))}
+        {targetDomains.length > 0 && targetDomains[0] !== 'Your domains' && (
+          <div style={{ marginTop: '0.75rem' }}>
+            <span style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.85)', marginRight: '0.5rem' }}>Your target domains:</span>
+            <div className="domain-tags" style={{ marginTop: '0.25rem' }}>
+              {targetDomains.map((d, i) => (
+                <span key={i}>{d}</span>
+              ))}
+            </div>
+          </div>
+        )}
+        {hasRecommendationForCurrentDomains && recommendedDomain && (
+          <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.3)' }}>
+            <span style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.85)', marginRight: '0.5rem' }}>Your recommended domain:</span>
+            <span style={{ fontWeight: 600, fontSize: '0.9375rem' }}>{recommendedDomain.name}</span>
+          </div>
+        )}
+        {previousRecommendation && (
+          <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.3)' }}>
+            <span style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.85)' }}>Previous recommendation (before you changed domains): </span>
+            <span style={{ fontWeight: 600, fontSize: '0.9375rem' }}>{previousRecommendation.name}</span>
           </div>
         )}
       </div>
@@ -733,37 +760,50 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
         </div>
       )}
 
-      {/* Assessment block – primary focus */}
-      {!assessmentPassed ? (
-        targetDomains.length < 2 ? (
-          <div className="assessment-cta-block">
-            <div className="assessment-cta-inner">
-              <div className="assessment-cta-icon select">
-                <TargetIcon className="w-8 h-8" />
-              </div>
-              <div style={{ flex: 1 }}>
-                <h2>Select your domains of interest</h2>
-                <p style={{ color: '#475569', marginBottom: '1rem', fontSize: '0.9375rem', lineHeight: 1.5 }}>
-                  Choose 2 to 3 domains you want to focus on. Then you can take the skill assessment to get a recommended domain.
-                </p>
-                <p style={{ fontSize: '0.875rem', color: '#64748b', margin: 0 }}>
-                  Go to your profile to select or update your target domains.
-                </p>
-              </div>
+      {/* Assessment block – Start Assessment when no recommendation for current domains; Assessment Passed when we have one */}
+      {targetDomains.length < 2 ? (
+        <div className="assessment-cta-block">
+          <div className="assessment-cta-inner">
+            <div className="assessment-cta-icon select">
+              <TargetIcon className="w-8 h-8" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <h2>Select your domains of interest</h2>
+              <p style={{ color: '#475569', marginBottom: '1rem', fontSize: '0.9375rem', lineHeight: 1.5 }}>
+                Choose 2 to 3 domains you want to focus on. Then you can take the skill assessment to get a recommended domain.
+              </p>
+              <p style={{ fontSize: '0.875rem', color: '#64748b', margin: 0 }}>
+                Go to your profile to select or update your target domains.
+              </p>
             </div>
           </div>
-        ) : (
+        </div>
+      ) : hasRecommendationForCurrentDomains ? (
+        <div className="assessment-passed-block">
+          <div className="passed-inner">
+            <div className="passed-icon">
+              <CheckCircleIcon className="w-6 h-6" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <h3>Assessment Passed!</h3>
+              <p>
+                Your recommended domain <strong>{recommendedDomain.name}</strong> is set. We&apos;ve unlocked beginner-level tasks for you.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
         <div className="assessment-cta-block">
           <div className="assessment-cta-inner">
             <div className="assessment-cta-icon alert">
               <AlertCircleIcon className="w-8 h-8" />
             </div>
             <div style={{ flex: 1 }}>
-              <h2>Complete Your Skill Assessment</h2>
+              <h2>Start Assessment</h2>
               <p style={{ color: '#475569', marginBottom: '1rem', fontSize: '0.9375rem', lineHeight: 1.5 }}>
-                {targetDomains[0] && targetDomains[0] !== 'Your domains'
-                  ? `Take the skill assessment for your target domains to get an AI-based domain recommendation. Covers: ${targetDomains.join(', ')}.`
-                  : 'Take the skill assessment across popular domains to get your highly recommended freelancing domain.'}
+                {assessmentPassed
+                  ? 'Take the assessment again for your current target domains to get a new recommendation.'
+                  : `Take the skill assessment for: ${targetDomains.join(', ')}. Get an AI-based domain recommendation.`}
               </p>
               <div className="assessment-card-inner">
                 <button type="button" className="btn-start-assessment" onClick={onStartAssessment}>
@@ -774,29 +814,10 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
             </div>
           </div>
         </div>
-        )
-      ) : (
-        <div className="assessment-passed-block">
-          <div className="passed-inner">
-            <div className="passed-icon">
-              <CheckCircleIcon className="w-6 h-6" />
-            </div>
-            <div style={{ flex: 1 }}>
-              <h3>Assessment Passed!</h3>
-              <p>
-                {recommendedDomain ? (
-                  <>Your <strong>highly recommended domain</strong>: <strong>{recommendedDomain.name}</strong>. We&apos;ve unlocked beginner-level tasks for you.</>
-                ) : (
-                  'Based on your performance, we\'ve unlocked beginner-level tasks for you.'
-                )}
-              </p>
-            </div>
-          </div>
-        </div>
       )}
 
-      {/* Tasks – only after pass */}
-      {assessmentPassed ? (
+      {/* Tasks – unlocked only when we have a recommendation for current target domains */}
+      {hasRecommendationForCurrentDomains ? (
         <div className="tasks-section-card">
           <div className="tasks-section-header">
             <div>
@@ -818,7 +839,7 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
           <p style={{ color: '#64748b', marginBottom: '1rem', maxWidth: 400, marginLeft: 'auto', marginRight: 'auto', fontSize: '0.9375rem' }}>
             Complete the skill assessment above to unlock personalized tasks based on your domains and performance.
           </p>
-          <button type="button" onClick={() => {}} className="btn-outline-primary">Take Assessment Now</button>
+          <button type="button" onClick={targetDomains.length >= 2 ? onStartAssessment : undefined} className="btn-outline-primary" disabled={targetDomains.length < 2}>Take Assessment Now</button>
         </div>
       )}
 

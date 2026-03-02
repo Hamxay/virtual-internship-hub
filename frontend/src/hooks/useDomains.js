@@ -5,6 +5,12 @@ const CACHE_MS = 5 * 60 * 1000; // 5 minutes
 let cachedList = null;
 let cacheTime = 0;
 
+/** Invalidate domains cache so next useDomains() refetches (e.g. after admin adds/edits/deletes a domain). */
+export function invalidateDomainsCache() {
+  cachedList = null;
+  cacheTime = 0;
+}
+
 /**
  * Hook: fetch domains list (for signup dropdowns). Caches result to avoid refetch when toggling login/signup.
  * Returns { domains, loading, error }.

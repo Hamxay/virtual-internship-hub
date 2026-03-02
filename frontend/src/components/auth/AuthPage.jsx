@@ -225,10 +225,11 @@ export default function AuthPage(props) {
       await authApi.verifySignupOtp({ email: pendingSignupPayload.email, otp: signupOtp });
       setLoading(false);
       setSignupVerifiedShowing(true);
-      // Schedule redirect in handler so it isn't cleared by effect cleanup (e.g. Strict Mode unmount)
+      // Use full-page redirect so it works even if React unmounts (e.g. Strict Mode) or router context is lost
       const loginPath = role === ROLE.MENTOR ? '/mentor/login' : '/student/login';
+      const redirectUrl = `${loginPath}?fromSignup=1`;
       setTimeout(() => {
-        navigate(loginPath, { state: { fromSignup: true }, replace: true });
+        window.location.replace(redirectUrl);
       }, 1500);
     } catch (err) {
       setError(getErrorMessage(err.response?.data || { message: 'Invalid or expired code.' }));
@@ -258,7 +259,7 @@ export default function AuthPage(props) {
 
   const loadingAny = loading || forgotLoading;
 
-  const fromSignup = location.state?.fromSignup === true;
+  const fromSignup = location.state?.fromSignup === true || new URLSearchParams(location.search).get('fromSignup') === '1';
 
   return (
     <AuthLayout
