@@ -24,6 +24,9 @@ class QuestionForStudentSerializer(serializers.ModelSerializer):
 
 
 class SubmitAnswersSerializer(serializers.Serializer):
+    submission_token = serializers.UUIDField(
+        help_text='From GET student/assessments/composed/; binds answers to that question set.',
+    )
     answers = serializers.ListField(
         child=serializers.DictField(),
         help_text='List of {question_id: int, selected_option: "A"|"B"|"C"|"D"}',
@@ -45,6 +48,24 @@ class SubmitAnswersSerializer(serializers.Serializer):
             if opt not in ('A', 'B', 'C', 'D'):
                 raise serializers.ValidationError('Each selected_option must be A, B, C, or D.')
         return value
+
+    def validate(self, attrs):
+        from .services import get_valid_composed_session, validate_answers_match_session
+
+        request = self.context.get('request')
+        if not request or not getattr(request.user, 'is_authenticated', False):
+            raise serializers.ValidationError({'detail': 'Authentication required.'})
+
+        token = attrs['submission_token']
+        answer_ids = [int(a['question_id']) for a in attrs['answers']]
+        try:
+            session = get_valid_composed_session(request.user, token)
+            validate_answers_match_session(session, answer_ids)
+        except ValueError as e:
+            raise serializers.ValidationError({'submission_token': [str(e)]}) from e
+
+        attrs['_composed_session'] = session
+        return attrs
 
 
 class ComposedQuestionSerializer(serializers.Serializer):
@@ -75,8 +96,17 @@ class AttemptResultSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = StudentAssessmentAttempt
-        fields = ('id', 'assessment_title', 'submitted_at', 'score', 'total_points', 'recommended_domains', 'test_domains')
-        read_only_fields = ('id', 'submitted_at', 'score', 'total_points')
+        fields = (
+            'id',
+            'assessment_title',
+            'submitted_at',
+            'score',
+            'total_points',
+            'recommended_domains',
+            'test_domains',
+            'recommendation_meta',
+        )
+        read_only_fields = ('id', 'submitted_at', 'score', 'total_points', 'recommendation_meta')
 
     def get_assessment_title(self, obj):
         return 'Skill Assessment (multi-domain)'

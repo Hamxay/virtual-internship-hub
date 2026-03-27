@@ -1,11 +1,12 @@
 """
-FR2: Scikit-learn–based domain recommendation (ML path).
-Used by the submit-ml API only; existing rule-based recommend_one_domain is unchanged.
+FR2: Scikit-learn–based domain recommendation (ML only).
+Loads model_domain_recommender.joblib; no rule-based fallback.
+Train with: python manage.py train_domain_recommender
 """
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from .ai_recommendation import DomainScores, recommend_one_domain
+from .ai_recommendation import DomainScores
 
 NUM_FEATURES = 3
 _MODEL_CACHE = None
@@ -45,11 +46,12 @@ def _load_model():
 
 def recommend_one_domain_ml(per_domain_scores: DomainScores) -> Optional[int]:
     """
-    Recommend one domain using the Scikit-learn model when available.
-    Falls back to rule-based recommend_one_domain if model is missing or prediction fails.
+    Recommend one domain using the Scikit-learn model only.
+    Returns None if scores are empty, only one domain (use that domain), model missing,
+    or prediction fails / index out of range.
     """
     if not per_domain_scores:
-        return recommend_one_domain(per_domain_scores)
+        return None
     features, domain_ids = _build_features_and_domain_order(per_domain_scores)
     if not domain_ids:
         return None
@@ -57,14 +59,13 @@ def recommend_one_domain_ml(per_domain_scores: DomainScores) -> Optional[int]:
         return domain_ids[0]
     model = _load_model()
     if model is None:
-        return recommend_one_domain(per_domain_scores)
+        return None
     try:
         X = [features]
         pred = model.predict(X)
         idx = int(pred[0])
-        # Model was trained on 3 features; with 2 domains we pad to 3, so idx can be 2 and out of range
         if 0 <= idx < len(domain_ids):
             return domain_ids[idx]
     except Exception:
-        pass
-    return recommend_one_domain(per_domain_scores)
+        return None
+    return None

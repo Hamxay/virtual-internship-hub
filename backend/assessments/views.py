@@ -16,10 +16,10 @@ from django.utils import timezone
 from .services import (
     get_composed_questions,
     compute_composed_score_and_recommend,
+    create_composed_session,
     COMPOSED_MAX_ATTEMPTS_PER_DAY,
     PASSING_PERCENT,
 )
-from .ml_recommendation import recommend_one_domain_ml
 from .pagination import DomainQuestionPagination
 
 
@@ -109,6 +109,7 @@ class StudentComposedAssessmentView(APIView):
                 {'error': 'No questions available for your selected domains. Admin must add questions per domain first.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        session = create_composed_session(request.user, questions)
         data = {
             'questions': questions,
             'test_domain_ids': test_domain_ids,
@@ -117,11 +118,13 @@ class StudentComposedAssessmentView(APIView):
         }
         serializer = ComposedAssessmentSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        payload = dict(serializer.data)
+        payload['submission_token'] = str(session.token)
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class StudentComposedSubmitView(APIView):
-    """POST student/assessments/composed/submit/ – Submit composed test. Pass 70%%; on pass, recommend domain and add to profile."""
+    """POST student/assessments/composed/submit/ – Submit composed test. Pass 70%%; rule-based domain + explanation."""
     permission_classes = [permissions.IsAuthenticated, IsStudent]
 
     def post(self, request):
@@ -131,13 +134,14 @@ class StudentComposedSubmitView(APIView):
                 {'error': f'You can take the assessment up to {COMPOSED_MAX_ATTEMPTS_PER_DAY} times per day. Try again tomorrow.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        serializer = SubmitAnswersSerializer(data=request.data)
+        serializer = SubmitAnswersSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
+        session = serializer.validated_data.pop('_composed_session')
         answers_data = serializer.validated_data['answers']
         answers_tuples = [(a['question_id'], a['selected_option']) for a in answers_data]
 
-        score, total_points, correct_count, _per_domain, recommended_domain_id = compute_composed_score_and_recommend(
-            answers_tuples
+        score, total_points, correct_count, _per_domain, recommended_domain_id, recommendation_meta = (
+            compute_composed_score_and_recommend(answers_tuples)
         )
         percentage = round((score / total_points * 100), 1) if total_points else 0
         passed = percentage >= PASSING_PERCENT
@@ -147,7 +151,8 @@ class StudentComposedSubmitView(APIView):
             user=request.user,
             score=score,
             total_points=total_points,
-            answers=serializer.validated_data['answers'],
+            answers=answers_data,
+            recommendation_meta=recommendation_meta,
         )
         if passed and recommended_domain_id is not None:
             attempt.recommended_domains.set([recommended_domain_id])
@@ -163,65 +168,7 @@ class StudentComposedSubmitView(APIView):
         if domain_ids:
             attempt.test_domains.set(domain_ids)
 
-        result = AttemptResultSerializer(attempt)
-        data = result.data
-        data['percentage'] = percentage
-        data['passed'] = passed
-        data['question_count'] = question_count
-        data['correct_count'] = correct_count
-        if not passed:
-            data['message'] = 'Score below 70%%. Take the test again. You have 2 attempts per day.'
-        return Response(data, status=status.HTTP_201_CREATED)
-
-
-class StudentComposedSubmitMLView(APIView):
-    """POST student/assessments/composed/submit-ml/ – Same as submit but uses Scikit-learn for domain recommendation."""
-    permission_classes = [permissions.IsAuthenticated, IsStudent]
-
-    def post(self, request):
-        attempt_count_today = _attempts_today(request.user)
-        if attempt_count_today >= COMPOSED_MAX_ATTEMPTS_PER_DAY:
-            return Response(
-                {'error': f'You can take the assessment up to {COMPOSED_MAX_ATTEMPTS_PER_DAY} times per day. Try again tomorrow.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        serializer = SubmitAnswersSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        answers_data = serializer.validated_data['answers']
-        answers_tuples = [(a['question_id'], a['selected_option']) for a in answers_data]
-
-        score, total_points, correct_count, per_domain, _ = compute_composed_score_and_recommend(answers_tuples)
-        recommended_domain_id = recommend_one_domain_ml(per_domain)
-
-        percentage = round((score / total_points * 100), 1) if total_points else 0
-        passed = percentage >= PASSING_PERCENT
-        question_count = len(answers_data)
-
-        try:
-            attempt = StudentAssessmentAttempt.objects.create(
-                user=request.user,
-                score=score,
-                total_points=total_points,
-                answers=serializer.validated_data['answers'],
-            )
-            if passed and recommended_domain_id is not None:
-                attempt.recommended_domains.set([recommended_domain_id])
-                profile = getattr(request.user, 'student_profile', None)
-                if profile:
-                    profile.target_domains.add(recommended_domain_id)
-            q_ids = [a['question_id'] for a in answers_data]
-            domain_ids = list(
-                AssessmentQuestion.objects.filter(id__in=q_ids)
-                .values_list('domain_id', flat=True)
-                .distinct()
-            )
-            if domain_ids:
-                attempt.test_domains.set(domain_ids)
-        except Exception as e:
-            return Response(
-                {'error': str(e) if str(e) else 'Failed to save assessment. Please try again.'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        session.delete()
 
         result = AttemptResultSerializer(attempt)
         data = result.data
@@ -232,6 +179,11 @@ class StudentComposedSubmitMLView(APIView):
         if not passed:
             data['message'] = 'Score below 70%%. Take the test again. You have 2 attempts per day.'
         return Response(data, status=status.HTTP_201_CREATED)
+
+
+class StudentComposedSubmitMLView(StudentComposedSubmitView):
+    """POST student/assessments/composed/submit-ml/ – Same as submit/. Kept for backward-compatible URL."""
+    pass
 
 
 class StudentAttemptListView(generics.ListAPIView):

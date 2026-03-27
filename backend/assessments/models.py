@@ -2,6 +2,8 @@
 Skill assessment models (FR2). Domain and User live in accounts.
 Questions are per-domain; no separate SkillAssessment container.
 """
+import uuid
+
 from django.conf import settings
 from django.db import models
 
@@ -42,6 +44,28 @@ class AssessmentQuestion(models.Model):
         return f"Q{self.order} – {self.text[:50]}…"
 
 
+class ComposedAssessmentSession(models.Model):
+    """
+    Binds a GET /composed/ question set to a later submit.
+    Prevents submitting answers for questions that were not issued for this attempt.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='composed_assessment_sessions',
+    )
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    question_ids = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'composed_assessment_sessions'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user_id} – {self.token}"
+
+
 class StudentAssessmentAttempt(models.Model):
     """One student's submission: score, test_domains, recommended_domains (FR2). Composed only."""
     user = models.ForeignKey(
@@ -64,6 +88,11 @@ class StudentAssessmentAttempt(models.Model):
         blank=True,
     )
     answers = models.JSONField(default=list, blank=True)
+    recommendation_meta = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Rule-based ranked domains, explanation, method (FR2).',
+    )
 
     class Meta:
         db_table = 'student_assessment_attempts'

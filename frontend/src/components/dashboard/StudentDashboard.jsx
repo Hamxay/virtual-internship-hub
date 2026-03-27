@@ -1,5 +1,5 @@
 /**
- * Student Dashboard – FR2 skill assessment (composed MCQs, AI-recommended domain), tasks, career chatbot.
+ * Student Dashboard – FR2 skill assessment (composed MCQs, rule-based domain recommendation), tasks, career chatbot.
  */
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
@@ -224,6 +224,18 @@ function SelectDomainsCard({ onSaved, refreshUser, initialSelectedIds = [] }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // Sync from server when profile ids actually change (avoid resetting on new [] reference each render)
+  const initialIdsKey = Array.isArray(initialSelectedIds)
+    ? [...initialSelectedIds].sort((a, b) => a - b).join(',')
+    : '';
+  useEffect(() => {
+    const next = initialIdsKey ? initialIdsKey.split(',').map(Number) : [];
+    setSelectedIds((prev) => {
+      const prevKey = [...prev].sort((a, b) => a - b).join(',');
+      return prevKey === initialIdsKey ? prev : next;
+    });
+  }, [initialIdsKey]);
+
   const toggle = (id) => {
     setSelectedIds((prev) => {
       if (prev.includes(id)) return prev.filter((x) => x !== id);
@@ -240,8 +252,8 @@ function SelectDomainsCard({ onSaved, refreshUser, initialSelectedIds = [] }) {
     setError(null);
     setSaving(true);
     studentApi.updateProfile(buildProfileUpdatePayload(selectedIds))
-      .then(() => {
-        if (typeof refreshUser === 'function') refreshUser();
+      .then(async () => {
+        if (typeof refreshUser === 'function') await refreshUser();
         if (typeof onSaved === 'function') onSaved();
       })
       .catch((err) => setError(err.response?.data?.detail || err.message || 'Failed to save'))
@@ -335,6 +347,19 @@ function AssessmentResultView({ result, onBack }) {
         {passed && recommended && (
           <div className="quiz-note-box" style={{ marginTop: '1rem' }}>
             <p><strong>Your recommended domain:</strong> {recommended.name}</p>
+            {result.recommendation_meta?.explanation && (
+              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem', color: '#374151' }}>
+                {result.recommendation_meta.explanation}
+              </p>
+            )}
+            {Array.isArray(result.recommendation_meta?.ranked_domains) && result.recommendation_meta.ranked_domains.length > 1 && (
+              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.8125rem', color: '#6b7280' }}>
+                <strong>How you scored by domain:</strong>{' '}
+                {result.recommendation_meta.ranked_domains
+                  .map((d) => `${d.domain_name} (${d.percentage}%)`)
+                  .join(' · ')}
+              </p>
+            )}
             <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem' }}>This domain has been added to your profile.</p>
           </div>
         )}
@@ -450,8 +475,12 @@ function StudentDashboard() {
   const handleSubmitAssessment = () => {
     if (!composedData?.questions?.length) return;
     setSubmitLoading(true);
-    studentApi.submitComposedAssessmentML(
-      buildAssessmentSubmitPayload(composedData.questions, selectedAnswers)
+    studentApi.submitComposedAssessment(
+      buildAssessmentSubmitPayload(
+        composedData.questions,
+        selectedAnswers,
+        composedData.submission_token
+      )
     )
       .then((res) => {
         setPendingResult(res.data);
@@ -538,7 +567,9 @@ function StudentDashboard() {
       );
     }
     const lastAttemptTargetIds = (lastAttempt?.test_domains ?? []).map((d) => d.id).sort().join(',');
-        const hasRecommendationForCurrentDomains = Boolean(lastAttempt?.recommended_domains?.[0] && lastAttemptTargetIds === targetDomainKey);
+    const hasRecommendationForCurrentDomains = Boolean(
+      lastAttempt?.recommended_domains?.[0] && lastAttemptTargetIds === targetDomainKey
+    );
 
         switch (activeView) {
       case 'dashboard':
@@ -594,9 +625,14 @@ function StudentDashboard() {
                   </span>
                 </div>
                 {lastAttempt?.recommended_domains?.[0] && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem 1rem' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem 1rem', alignItems: 'flex-start' }}>
                     <span style={{ color: '#6b7280', minWidth: 100 }}>Recommended domain</span>
-                    <span style={{ color: '#047857', fontWeight: 500 }}>{lastAttempt.recommended_domains[0].name}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ color: '#047857', fontWeight: 500 }}>{lastAttempt.recommended_domains[0].name}</span>
+                      <p style={{ margin: '0.35rem 0 0 0', fontSize: '0.8125rem', color: '#6b7280' }}>
+                        From your latest passed assessment. It stays visible after you update target domains; retake the assessment to refresh the match.
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
@@ -608,7 +644,7 @@ function StudentDashboard() {
             <SelectDomainsCard
               refreshUser={refreshUser}
               initialSelectedIds={user?.student_profile?.target_domains?.map((d) => d.id) ?? []}
-              onSaved={() => setActiveView('dashboard')}
+              onSaved={() => loadAttempts()}
             />
             <button type="button" onClick={() => setActiveView('dashboard')} style={{ marginTop: '1.5rem', padding: '0.5rem 1rem', border: '1px solid #e5e7eb', background: 'white', borderRadius: 8, cursor: 'pointer', color: '#374151', fontSize: '0.875rem' }}>
               Back to Dashboard
@@ -716,7 +752,10 @@ function StudentDashboard() {
 
 function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, lastAttempt, hasRecommendationForCurrentDomains = false, attemptCount, attemptCountLabel = 'used', maxAttemptsPerDay = 2, tasksCompleted = 0, onStartAssessment, assessmentError }) {
   const recommendedDomain = lastAttempt?.recommended_domains?.[0];
-  const previousRecommendation = !hasRecommendationForCurrentDomains && lastAttempt?.recommended_domains?.[0];
+  const lastAttemptPassed = lastAttempt
+    ? (lastAttempt.score / (lastAttempt.total_points || 1)) * 100 >= PASSING_PERCENT
+    : false;
+  const showRecommendation = Boolean(recommendedDomain && lastAttemptPassed);
 
   return (
     <div className="dashboard-section">
@@ -724,11 +763,13 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
       <div className="welcome-card">
         <h2>Welcome back, {studentName}!</h2>
         <p>
-          {hasRecommendationForCurrentDomains
+          {showRecommendation && hasRecommendationForCurrentDomains
             ? 'Great job on passing your assessment. Check out your recommended tasks below.'
-            : assessmentPassed
-              ? 'Take the assessment again for your current target domains to get a new recommendation.'
-              : 'Complete your skill assessment to unlock personalized tasks and get a domain recommendation.'}
+            : showRecommendation && !hasRecommendationForCurrentDomains
+              ? `Your last assessment recommended ${recommendedDomain.name}. You updated your target domains — retake the assessment for a fresh match with your current selection, or keep this recommendation as guidance.`
+              : assessmentPassed
+                ? 'Take the assessment again for your current target domains to get a new recommendation.'
+                : 'Complete your skill assessment to unlock personalized tasks and get a domain recommendation.'}
         </p>
         {targetDomains.length > 0 && targetDomains[0] !== 'Your domains' && (
           <div style={{ marginTop: '0.75rem' }}>
@@ -740,16 +781,10 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
             </div>
           </div>
         )}
-        {hasRecommendationForCurrentDomains && recommendedDomain && (
+        {showRecommendation && recommendedDomain && (
           <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.3)' }}>
-            <span style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.85)', marginRight: '0.5rem' }}>Your recommended domain:</span>
+            <span style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.85)', marginRight: '0.5rem' }}>Recommended domain (from your assessment):</span>
             <span style={{ fontWeight: 600, fontSize: '0.9375rem' }}>{recommendedDomain.name}</span>
-          </div>
-        )}
-        {previousRecommendation && (
-          <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.3)' }}>
-            <span style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.85)' }}>Previous recommendation (before you changed domains): </span>
-            <span style={{ fontWeight: 600, fontSize: '0.9375rem' }}>{previousRecommendation.name}</span>
           </div>
         )}
       </div>
@@ -778,7 +813,7 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
             </div>
           </div>
         </div>
-      ) : hasRecommendationForCurrentDomains ? (
+      ) : showRecommendation && hasRecommendationForCurrentDomains ? (
         <div className="assessment-passed-block">
           <div className="passed-inner">
             <div className="passed-icon">
@@ -789,6 +824,25 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
               <p>
                 Your recommended domain <strong>{recommendedDomain.name}</strong> is set. We&apos;ve unlocked beginner-level tasks for you.
               </p>
+            </div>
+          </div>
+        </div>
+      ) : showRecommendation && !hasRecommendationForCurrentDomains ? (
+        <div className="assessment-cta-block" style={{ borderColor: '#bae6fd', background: '#f0f9ff' }}>
+          <div className="assessment-cta-inner">
+            <div className="assessment-cta-icon select">
+              <TargetIcon className="w-8 h-8" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <h2>Your last recommendation</h2>
+              <p style={{ color: '#475569', marginBottom: '1rem', fontSize: '0.9375rem', lineHeight: 1.5 }}>
+                <strong>{recommendedDomain.name}</strong> is still your assessment recommendation. Your target domains no longer match that test — take the assessment again to get a recommendation aligned with your current selection.
+              </p>
+              <div className="assessment-card-inner">
+                <button type="button" className="btn-start-assessment" onClick={onStartAssessment}>
+                  Retake assessment
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -803,7 +857,7 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
               <p style={{ color: '#475569', marginBottom: '1rem', fontSize: '0.9375rem', lineHeight: 1.5 }}>
                 {assessmentPassed
                   ? 'Take the assessment again for your current target domains to get a new recommendation.'
-                  : `Take the skill assessment for: ${targetDomains.join(', ')}. Get an AI-based domain recommendation.`}
+                  : `Take the skill assessment for: ${targetDomains.join(', ')}. Get a domain recommendation from your scores.`}
               </p>
               <div className="assessment-card-inner">
                 <button type="button" className="btn-start-assessment" onClick={onStartAssessment}>

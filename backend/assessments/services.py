@@ -1,20 +1,26 @@
 """
 Assessment question selection, scoring, and domain recommendation (FR2).
-- Composed test: 10 questions per target domain, or 50 from popular domains.
-- AI recommendation in assessments.ai_recommendation (single highly recommended domain).
+- Composed test: up to 3 target domains, 10 questions per domain.
+- Domain recommendation: rule-based (highest per-domain %); explanation + ranked top domains.
+- Submit must use submission_token from GET composed (bound question set).
 """
+from datetime import timedelta
 import random
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Any, Dict, Union
+from uuid import UUID
+
+from django.utils import timezone
 
 from accounts.models import Domain
-from .models import AssessmentQuestion
-from .ai_recommendation import recommend_one_domain, DomainScores
+from .models import AssessmentQuestion, ComposedAssessmentSession
+from .ai_recommendation import DomainScores, recommend_rule_based_with_explanation
 
 QUESTIONS_PER_DOMAIN = 10
 COMPOSED_MAX_ATTEMPTS_PER_DAY = 2
 MIN_TARGET_DOMAINS = 2
 MAX_TARGET_DOMAINS_FOR_TEST = 3
 PASSING_PERCENT = 70
+COMPOSED_SESSION_MAX_AGE_HOURS = 2
 
 
 def _get_questions_for_domain(domain_id: int) -> List[AssessmentQuestion]:
@@ -41,7 +47,6 @@ def get_composed_questions(user) -> Tuple[List[dict], List[int]]:
     if len(target_ids) < MIN_TARGET_DOMAINS:
         return questions_out, domain_ids_in_test
 
-    # Use first 2 or 3 domains only
     domain_ids_to_use = target_ids[:MAX_TARGET_DOMAINS_FOR_TEST]
     for domain_id in domain_ids_to_use:
         qs = _get_questions_for_domain(domain_id)
@@ -65,13 +70,52 @@ def get_composed_questions(user) -> Tuple[List[dict], List[int]]:
     return questions_out, domain_ids_in_test
 
 
+def create_composed_session(user, questions: List[dict]) -> ComposedAssessmentSession:
+    """Replace any prior pending session; store issued question ids."""
+    ComposedAssessmentSession.objects.filter(user=user).delete()
+    qids = [q['id'] for q in questions]
+    return ComposedAssessmentSession.objects.create(user=user, question_ids=qids)
+
+
+def get_valid_composed_session(user, token: Union[UUID, str]) -> ComposedAssessmentSession:
+    """Load session for user or raise ValueError (invalid / expired)."""
+    try:
+        if isinstance(token, str):
+            token = UUID(str(token).strip())
+    except (ValueError, TypeError):
+        raise ValueError('Invalid submission token format.') from None
+
+    session = ComposedAssessmentSession.objects.filter(user=user, token=token).first()
+    if not session:
+        raise ValueError(
+            'Invalid submission token. Open the assessment again (GET student/assessments/composed/).'
+        )
+    age = timezone.now() - session.created_at
+    if age > timedelta(hours=COMPOSED_SESSION_MAX_AGE_HOURS):
+        session.delete()
+        raise ValueError(
+            'This assessment session expired. Start again from GET student/assessments/composed/.'
+        )
+    return session
+
+
+def validate_answers_match_session(session: ComposedAssessmentSession, answer_question_ids: List[int]) -> None:
+    issued = set(session.question_ids)
+    answered = set(answer_question_ids)
+    if issued != answered:
+        raise ValueError(
+            'Answers must cover exactly the questions issued for this assessment '
+            '(same set of question ids, no extras or missing).'
+        )
+
+
 def compute_composed_score_and_recommend(
     answers: List[Tuple[int, str]]
-) -> Tuple[int, int, int, DomainScores, Optional[int]]:
+) -> Tuple[int, int, int, DomainScores, Optional[int], Dict[str, Any]]:
     """
-    Composed test: compute total score, per-domain scores, and one recommended domain (AI).
+    Composed test: score answers, then rule-based recommendation + meta.
     answers: [(question_id, selected_option), ...]
-    Returns (score, total_points, correct_count, per_domain_scores, recommended_domain_id).
+    Returns (score, total_points, correct_count, per_domain, recommended_domain_id, recommendation_meta).
     """
     q_ids = [a[0] for a in answers]
     questions = {
@@ -99,5 +143,11 @@ def compute_composed_score_and_recommend(
         s, t = per_domain[domain_id]
         per_domain[domain_id] = (s + (pts if correct else 0), t + pts)
 
-    recommended_id = recommend_one_domain(per_domain)
-    return total_score, total_points, correct_count, per_domain, recommended_id
+    domain_names = {
+        d.id: d.name
+        for d in Domain.objects.filter(id__in=list(per_domain.keys()))
+    }
+    recommendation_meta = recommend_rule_based_with_explanation(per_domain, domain_names)
+    recommended_id = recommendation_meta.get('recommended_domain_id')
+
+    return total_score, total_points, correct_count, per_domain, recommended_id, recommendation_meta

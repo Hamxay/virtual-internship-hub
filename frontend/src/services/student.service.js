@@ -7,10 +7,18 @@ export function buildProfileUpdatePayload(targetDomainIds) {
   return { target_domain_ids: targetDomainIds };
 }
 
-export function buildAssessmentSubmitPayload(questions, selectedAnswers) {
+/**
+ * @param {Array} questions - From GET composed (same order as selectedAnswers)
+ * @param {Array} selectedAnswers - 'A'|'B'|'C'|'D' per question
+ * @param {string} submissionToken - UUID from GET composed (submission_token)
+ */
+export function buildAssessmentSubmitPayload(questions, selectedAnswers, submissionToken) {
   const answers = (questions || []).map((q, i) => ({
     question_id: q.id,
     selected_option: selectedAnswers[i] || 'A',
   }));
-  return { answers };
+  return {
+    submission_token: submissionToken,
+    answers,
+  };
 }
