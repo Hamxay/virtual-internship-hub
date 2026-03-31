@@ -35,6 +35,7 @@ class SubmitAnswersSerializer(serializers.Serializer):
     def validate_answers(self, value):
         if not value:
             raise serializers.ValidationError('At least one answer is required.')
+        qids = []
         for item in value:
             if 'question_id' not in item or 'selected_option' not in item:
                 raise serializers.ValidationError('Each item must have question_id and selected_option.')
@@ -42,11 +43,14 @@ class SubmitAnswersSerializer(serializers.Serializer):
                 qid = item.get('question_id')
                 if qid is None or (isinstance(qid, (int, float)) and int(qid) <= 0):
                     raise serializers.ValidationError('Each question_id must be a positive integer.')
+                qids.append(int(qid))
             except (TypeError, ValueError):
                 raise serializers.ValidationError('Each question_id must be a positive integer.')
             opt = (item.get('selected_option') or '').strip().upper()
             if opt not in ('A', 'B', 'C', 'D'):
                 raise serializers.ValidationError('Each selected_option must be A, B, C, or D.')
+        if len(qids) != len(set(qids)):
+            raise serializers.ValidationError('Each question_id must appear at most once.')
         return value
 
     def validate(self, attrs):

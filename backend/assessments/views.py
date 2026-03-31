@@ -17,6 +17,7 @@ from .services import (
     get_composed_questions,
     compute_composed_score_and_recommend,
     create_composed_session,
+    add_recommended_domain_if_room,
     COMPOSED_MAX_ATTEMPTS_PER_DAY,
     PASSING_PERCENT,
 )
@@ -147,6 +148,16 @@ class StudentComposedSubmitView(APIView):
         passed = percentage >= PASSING_PERCENT
         question_count = len(answers_data)
 
+        added_to_profile = False
+        if passed and recommended_domain_id is not None:
+            profile = getattr(request.user, 'student_profile', None)
+            added_to_profile = add_recommended_domain_if_room(profile, recommended_domain_id)
+
+        recommendation_meta = {
+            **recommendation_meta,
+            'added_recommended_to_profile': added_to_profile,
+        }
+
         attempt = StudentAssessmentAttempt.objects.create(
             user=request.user,
             score=score,
@@ -156,9 +167,6 @@ class StudentComposedSubmitView(APIView):
         )
         if passed and recommended_domain_id is not None:
             attempt.recommended_domains.set([recommended_domain_id])
-            profile = getattr(request.user, 'student_profile', None)
-            if profile:
-                profile.target_domains.add(recommended_domain_id)
         q_ids = [a['question_id'] for a in answers_data]
         domain_ids = list(
             AssessmentQuestion.objects.filter(id__in=q_ids)

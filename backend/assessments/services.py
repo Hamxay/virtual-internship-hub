@@ -21,6 +21,8 @@ MIN_TARGET_DOMAINS = 2
 MAX_TARGET_DOMAINS_FOR_TEST = 3
 PASSING_PERCENT = 70
 COMPOSED_SESSION_MAX_AGE_HOURS = 2
+# Must match StudentProfileSerializer / product rule (2–3 target domains max)
+MAX_STUDENT_TARGET_DOMAINS = 3
 
 
 def _get_questions_for_domain(domain_id: int) -> List[AssessmentQuestion]:
@@ -100,13 +102,35 @@ def get_valid_composed_session(user, token: Union[UUID, str]) -> ComposedAssessm
 
 
 def validate_answers_match_session(session: ComposedAssessmentSession, answer_question_ids: List[int]) -> None:
-    issued = set(session.question_ids)
+    issued_list = session.question_ids
+    if len(answer_question_ids) != len(issued_list):
+        raise ValueError(
+            'Each issued question must be answered exactly once (no duplicates or missing ids).'
+        )
+    issued = set(issued_list)
     answered = set(answer_question_ids)
     if issued != answered:
         raise ValueError(
             'Answers must cover exactly the questions issued for this assessment '
             '(same set of question ids, no extras or missing).'
         )
+
+
+def add_recommended_domain_if_room(profile, domain_id: Optional[int]) -> bool:
+    """
+    Add recommended domain to student profile without exceeding MAX_STUDENT_TARGET_DOMAINS.
+    Returns True if the domain is now in target_domains (added or already present).
+    Returns False if profile is missing, domain_id is None, or profile is full and domain not yet selected.
+    """
+    if profile is None or domain_id is None:
+        return False
+    existing_ids = set(profile.target_domains.values_list('id', flat=True))
+    if domain_id in existing_ids:
+        return True
+    if profile.target_domains.count() >= MAX_STUDENT_TARGET_DOMAINS:
+        return False
+    profile.target_domains.add(domain_id)
+    return True
 
 
 def compute_composed_score_and_recommend(
