@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 import { adminApi } from '../../api/admin.api';
 import { useDomains, invalidateDomainsCache } from '../../hooks/useDomains';
 import { buildDomainPayload, buildQuestionPayload } from '../../services/admin.service';
+import AdminProjectsSection from './AdminProjectsSection';
 import {
   GraduationCapIcon,
   LayoutDashboardIcon,
@@ -57,7 +58,7 @@ function AdminDashboard() {
       case 'domains':
         return <AdminDomainsSection onDomainsChanged={invalidateDomainsCache} />;
       case 'projects':
-        return <AdminProjectsPlaceholder />;
+        return <AdminProjectsSection />;
       case 'reports':
         return <AdminReportsPlaceholder />;
       default:
@@ -858,21 +859,6 @@ function AdminAssessmentsSection() {
           )}
           {!selectedDomainId && <p style={{ color: '#6b7280' }}>Select a domain to add questions.</p>}
         </div>
-      </div>
-    </div>
-  );
-}
-
-function AdminProjectsPlaceholder() {
-  return (
-    <div className="dashboard-section">
-      <h1>Project Templates</h1>
-      <p className="section-desc">Define, upload, and update project templates and evaluation criteria (FR10).</p>
-      <div className="info-card" style={{ marginTop: '1rem' }}>
-        <p>Add project templates with title, domain, complexity, and evaluation criteria. These feed into task allocation (FR3) and student tasks.</p>
-        <button type="button" className="btn-primary mt-4" style={{ padding: '0.5rem 1rem', borderRadius: 8, background: '#111827', color: 'white', border: 'none', cursor: 'pointer' }}>
-          Add Template (API required)
-        </button>
       </div>
     </div>
   );

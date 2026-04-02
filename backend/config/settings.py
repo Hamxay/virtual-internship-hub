@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'accounts',
     'assessments',
+    'projects',
 ]
 
 MIDDLEWARE = [
@@ -191,7 +192,14 @@ JAZZMIN_SETTINGS = {
     "site_icon": None,
     "welcome_sign": "Welcome to Virtual Internship Hub Admin",
     "copyright": "Virtual Internship Hub",
-    "search_model": ["accounts.User", "accounts.StudentProfile", "accounts.MentorProfile", "assessments.AssessmentQuestion"],
+    "search_model": [
+        "accounts.User",
+        "accounts.StudentProfile",
+        "accounts.MentorProfile",
+        "assessments.AssessmentQuestion",
+        "projects.ProjectTemplate",
+        "projects.StudentProjectAssignment",
+    ],
     "user_avatar": None,
     "topmenu_links": [
         {"name": "Home", "url": "admin:index", "permissions": ["auth.view_user"]},
@@ -203,7 +211,19 @@ JAZZMIN_SETTINGS = {
     "navigation_expanded": True,
     "hide_apps": [],
     "hide_models": [],
-    "order_with_respect_to": ["accounts", "accounts.User", "accounts.StudentProfile", "accounts.MentorProfile", "accounts.Domain", "assessments", "assessments.AssessmentQuestion", "assessments.StudentAssessmentAttempt"],
+    "order_with_respect_to": [
+        "accounts",
+        "accounts.User",
+        "accounts.StudentProfile",
+        "accounts.MentorProfile",
+        "accounts.Domain",
+        "assessments",
+        "assessments.AssessmentQuestion",
+        "assessments.StudentAssessmentAttempt",
+        "projects",
+        "projects.ProjectTemplate",
+        "projects.StudentProjectAssignment",
+    ],
     "custom_links": {},
     "icons": {
         "auth": "fas fa-users-cog",
@@ -216,6 +236,9 @@ JAZZMIN_SETTINGS = {
         "assessments": "fas fa-clipboard-list",
         "assessments.AssessmentQuestion": "fas fa-question-circle",
         "assessments.StudentAssessmentAttempt": "fas fa-user-check",
+        "projects": "fas fa-diagram-project",
+        "projects.ProjectTemplate": "fas fa-folder-tree",
+        "projects.StudentProjectAssignment": "fas fa-tasks",
     },
     "default_icon_parents": "fas fa-chevron-circle-right",
     "default_icon_children": "fas fa-circle",

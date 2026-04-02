@@ -7,6 +7,7 @@ import { studentApi } from '../../api/student.api';
 import { getDomains } from '../../api/domains.api';
 import { buildProfileUpdatePayload, buildAssessmentSubmitPayload } from '../../services/student.service';
 import { getErrorMessage } from '../../utilities/authUtils';
+import StudentTasksSection from './StudentTasksSection';
 import {
   GraduationCapIcon,
   LayoutDashboardIcon,
@@ -396,7 +397,7 @@ function StudentDashboard() {
   const [result, setResult] = useState(null);
   const [resultReviewing, setResultReviewing] = useState(false);
   const [pendingResult, setPendingResult] = useState(null);
-  const [tasksCompleted] = useState(0); // real data: replace with API when available
+  const [taskStats, setTaskStats] = useState({ completed: 0, inProgress: 0 });
 
   const loadAttempts = () => {
     studentApi.getAttempts()
@@ -583,13 +584,19 @@ function StudentDashboard() {
             attemptCount={attemptCountToday}
             attemptCountLabel="used today"
             maxAttemptsPerDay={2}
-            tasksCompleted={tasksCompleted}
+            tasksCompleted={taskStats.completed}
             onStartAssessment={handleStartAssessment}
             assessmentError={assessmentError}
           />
         );
       case 'tasks':
-        return <StudentTasksPlaceholder assessmentPassed={assessmentPassed} onStartAssessment={() => setActiveView('dashboard')} />;
+        return (
+          <StudentTasksSection
+            assessmentPassed={assessmentPassed}
+            onStartAssessment={() => setActiveView('dashboard')}
+            onStatsChange={setTaskStats}
+          />
+        );
       case 'portfolio':
         return <StudentPortfolioPlaceholder />;
       case 'profile':
@@ -662,7 +669,7 @@ function StudentDashboard() {
             attemptCount={attemptCountToday}
             attemptCountLabel="used today"
             maxAttemptsPerDay={2}
-            tasksCompleted={tasksCompleted}
+            tasksCompleted={taskStats.completed}
             onStartAssessment={handleStartAssessment}
             assessmentError={assessmentError}
           />
@@ -934,31 +941,6 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
             </div>
           </button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function StudentTasksPlaceholder({ assessmentPassed, onStartAssessment }) {
-  if (!assessmentPassed) {
-    return (
-      <div className="dashboard-section">
-        <h1>My Tasks</h1>
-        <p className="section-desc">Complete the skill assessment first to see recommended tasks.</p>
-        <div className="tasks-locked-block">
-          <div className="lock-icon-wrap"><LockIcon className="w-6 h-6" /></div>
-          <p style={{ color: '#6b7280', marginBottom: '1rem' }}>Tasks are recommended after you pass the assessment.</p>
-          <button type="button" onClick={onStartAssessment} style={{ padding: '0.5rem 1rem', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Go to Assessment</button>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="dashboard-section">
-      <h1>My Tasks</h1>
-      <p className="section-desc">Your assigned and recommended tasks (beginner first).</p>
-      <div className="info-card">
-        <p>Task list will load from API. Beginner tasks shown first based on your assessment score.</p>
       </div>
     </div>
   );

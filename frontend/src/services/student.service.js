@@ -22,3 +22,17 @@ export function buildAssessmentSubmitPayload(questions, selectedAnswers, submiss
     answers,
   };
 }
+
+export function buildProjectSubmissionPayload(form) {
+  const splitFiles = String(form.submitted_files || '')
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return {
+    repository_url: String(form.repository_url || '').trim(),
+    artifact_url: String(form.artifact_url || '').trim(),
+    submission_text: String(form.submission_text || '').trim(),
+    notes: String(form.notes || '').trim(),
+    submitted_files: splitFiles,
+  };
+}

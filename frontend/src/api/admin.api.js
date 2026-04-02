@@ -21,4 +21,13 @@ export const adminApi = {
     client.patch(`/admin/domains/${domainId}/questions/${questionId}/`, data),
   deleteQuestion: (domainId, questionId) =>
     client.delete(`/admin/domains/${domainId}/questions/${questionId}/`),
+
+  // Project templates and AI evaluation
+  getProjectTemplates: (params) => client.get('/admin/project-templates/', { params: params || {} }),
+  createProjectTemplate: (data) => client.post('/admin/project-templates/', data),
+  updateProjectTemplate: (id, data) => client.patch(`/admin/project-templates/${id}/`, data),
+  deleteProjectTemplate: (id) => client.delete(`/admin/project-templates/${id}/`),
+  assignProject: (data) => client.post('/admin/projects/assign/', data),
+  getPendingSubmissions: () => client.get('/admin/submissions/pending/'),
+  getEvaluationSummary: () => client.get('/admin/evaluations/summary/'),
 };
