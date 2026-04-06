@@ -1,5 +1,5 @@
 """
-Skill assessment models (FR2). Domain and User live in accounts.
+Skill assessment models. Domain and User live in accounts.
 Questions are per-domain; no separate SkillAssessment container.
 """
 import uuid
@@ -67,7 +67,7 @@ class ComposedAssessmentSession(models.Model):
 
 
 class StudentAssessmentAttempt(models.Model):
-    """One student's submission: score, test_domains, recommended_domains (FR2). Composed only."""
+    """One student's composed assessment submission: score, domains, recommendation_meta."""
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -91,7 +91,7 @@ class StudentAssessmentAttempt(models.Model):
     recommendation_meta = models.JSONField(
         default=dict,
         blank=True,
-        help_text='Rule-based ranked domains, explanation, method (FR2).',
+        help_text='ranked_domains, weighted_domain_profile, ml primary, method, explanation.',
     )
 
     class Meta:

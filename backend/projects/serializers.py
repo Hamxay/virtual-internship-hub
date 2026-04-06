@@ -244,6 +244,7 @@ class StudentProgressSnapshotSerializer(serializers.ModelSerializer):
             'average_score',
             'current_complexity_band',
             'strongest_domain',
+            'domain_weights',
             'last_recommended_at',
             'metadata',
             'updated_at',

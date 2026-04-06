@@ -254,6 +254,12 @@ class StudentProgressSnapshot(models.Model):
     )
     last_recommended_at = models.DateTimeField(null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
+    # Normalized domain_id (str) -> weight_percent (0–100), sum ~100; from latest skill assessment
+    domain_weights = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Weighted domain profile for recommendations (domain id str -> percent).',
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

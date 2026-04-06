@@ -18,6 +18,7 @@ from .services import (
     compute_composed_score_and_recommend,
     create_composed_session,
     add_recommended_domain_if_room,
+    sync_assessment_to_snapshot,
     COMPOSED_MAX_ATTEMPTS_PER_DAY,
     PASSING_PERCENT,
 )
@@ -125,7 +126,7 @@ class StudentComposedAssessmentView(APIView):
 
 
 class StudentComposedSubmitView(APIView):
-    """POST student/assessments/composed/submit/ – Submit composed test. Pass 70%%; rule-based domain + explanation."""
+    """POST student/assessments/composed/submit/ – MCQ scoring + RandomForest domain + weighted profile."""
     permission_classes = [permissions.IsAuthenticated, IsStudent]
 
     def post(self, request):
@@ -176,6 +177,8 @@ class StudentComposedSubmitView(APIView):
         if domain_ids:
             attempt.test_domains.set(domain_ids)
 
+        sync_assessment_to_snapshot(attempt.id)
+
         session.delete()
 
         result = AttemptResultSerializer(attempt)
@@ -187,11 +190,6 @@ class StudentComposedSubmitView(APIView):
         if not passed:
             data['message'] = 'Score below 70%%. Take the test again. You have 2 attempts per day.'
         return Response(data, status=status.HTTP_201_CREATED)
-
-
-class StudentComposedSubmitMLView(StudentComposedSubmitView):
-    """POST student/assessments/composed/submit-ml/ – Same as submit/. Kept for backward-compatible URL."""
-    pass
 
 
 class StudentAttemptListView(generics.ListAPIView):

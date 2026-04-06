@@ -1,5 +1,5 @@
 """
-FR2: Rule-based domain recommendation from per-domain assessment scores.
+Rule-based domain ranking from per-domain assessment scores (no ML).
 Highest percentage (earned points / total points) wins; ties broken by lower domain id.
 """
 from typing import Any, Dict, List, Optional
@@ -9,9 +9,7 @@ DomainScores = Dict[int, tuple[int, int]]
 
 
 def recommend_one_domain(per_domain_scores: DomainScores) -> Optional[int]:
-    """
-    Recommend a single domain that is the best fit (highest performance).
-    """
+    """Recommend a single domain with the best relative performance."""
     if not per_domain_scores:
         return None
 
@@ -35,9 +33,7 @@ def recommend_rule_based_with_explanation(
     per_domain_scores: DomainScores,
     domain_names: Dict[int, str],
 ) -> Dict[str, Any]:
-    """
-    Primary recommendation + ranked domains (up to tested domains) + human-readable explanation.
-    """
+    """Primary recommendation + ranked domains + human-readable explanation."""
     recommended_id = recommend_one_domain(per_domain_scores)
 
     ranked: List[Dict[str, Any]] = []

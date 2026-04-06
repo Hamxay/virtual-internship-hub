@@ -1,7 +1,7 @@
 """
-Assessment question selection, scoring, and domain recommendation (FR2).
+Assessment question selection, scoring, and domain recommendation (MCQ + ML profile).
 - Composed test: up to 3 target domains, 10 questions per domain.
-- Domain recommendation: rule-based (highest per-domain %); explanation + ranked top domains.
+- MCQ scoring is rule-based; primary domain + weighted profile use RandomForest (domain_recommendation package).
 - Submit must use submission_token from GET composed (bound question set).
 """
 from datetime import timedelta
@@ -12,8 +12,15 @@ from uuid import UUID
 from django.utils import timezone
 
 from accounts.models import Domain
-from .models import AssessmentQuestion, ComposedAssessmentSession
-from .ai_recommendation import DomainScores, recommend_rule_based_with_explanation
+from projects.models import StudentProgressSnapshot
+from projects.services.domain_profile import extract_domain_weights_from_recommendation_meta
+
+from .models import AssessmentQuestion, ComposedAssessmentSession, StudentAssessmentAttempt
+from .domain_recommendation import (
+    DomainScores,
+    build_ml_recommendation_meta,
+    recommend_rule_based_with_explanation,
+)
 
 QUESTIONS_PER_DOMAIN = 10
 COMPOSED_MAX_ATTEMPTS_PER_DAY = 2
@@ -133,13 +140,12 @@ def add_recommended_domain_if_room(profile, domain_id: Optional[int]) -> bool:
     return True
 
 
-def compute_composed_score_and_recommend(
-    answers: List[Tuple[int, str]]
-) -> Tuple[int, int, int, DomainScores, Optional[int], Dict[str, Any]]:
+def _score_composed_answers(
+    answers: List[Tuple[int, str]],
+) -> Tuple[int, int, int, DomainScores]:
     """
-    Composed test: score answers, then rule-based recommendation + meta.
-    answers: [(question_id, selected_option), ...]
-    Returns (score, total_points, correct_count, per_domain, recommended_domain_id, recommendation_meta).
+    Shared scoring for composed MCQ answers (rule-based correctness only).
+    Returns (total_score, total_points, correct_count, per_domain).
     """
     q_ids = [a[0] for a in answers]
     questions = {
@@ -167,11 +173,79 @@ def compute_composed_score_and_recommend(
         s, t = per_domain[domain_id]
         per_domain[domain_id] = (s + (pts if correct else 0), t + pts)
 
+    return total_score, total_points, correct_count, per_domain
+
+
+def compute_composed_score_and_recommend(
+    answers: List[Tuple[int, str]]
+) -> Tuple[int, int, int, DomainScores, Optional[int], Dict[str, Any]]:
+    """
+    Score MCQs; RandomForest primary domain + weighted profile, merged with rule-based meta.
+    Returns (score, total_points, correct_count, per_domain, recommended_domain_id, recommendation_meta).
+    """
+    total_score, total_points, correct_count, per_domain = _score_composed_answers(answers)
+
     domain_names = {
         d.id: d.name
         for d in Domain.objects.filter(id__in=list(per_domain.keys()))
     }
-    recommendation_meta = recommend_rule_based_with_explanation(per_domain, domain_names)
-    recommended_id = recommendation_meta.get('recommended_domain_id')
+    rule_meta = recommend_rule_based_with_explanation(per_domain, domain_names)
+    ml_meta = build_ml_recommendation_meta(per_domain, domain_names)
+    ml_primary = ml_meta.get('ml_primary_domain_id')
 
-    return total_score, total_points, correct_count, per_domain, recommended_id, recommendation_meta
+    recommendation_meta: Dict[str, Any] = {
+        **rule_meta,
+        'rule_based_recommended_domain_id': rule_meta.get('recommended_domain_id'),
+        'recommended_domain_id': ml_primary,
+        'method': 'random_forest',
+        'weighted_domain_profile': ml_meta.get('domain_prediction_probabilities', []),
+        'weighted_domain_profile_text': ml_meta.get('weighted_domain_profile_text', ''),
+        'ml_primary_domain_id': ml_primary,
+        'per_domain_percentages': ml_meta.get('per_domain_percentages', {}),
+        'ml_feature_domain_order': ml_meta.get('feature_domain_order', []),
+        'ml_classifier_fitted': ml_meta.get('classifier_fitted', False),
+    }
+
+    return total_score, total_points, correct_count, per_domain, ml_primary, recommendation_meta
+
+
+def sync_assessment_to_snapshot(attempt_id: int) -> None:
+    """
+    After skill assessment submit: align StudentProgressSnapshot with this attempt.
+
+    - strongest_domain: first recommended domain on the attempt (if any).
+    - domain_weights: normalized % per domain id + metadata['domain_weights'].
+    - current_complexity_band: BEGINNER (onboarding baseline after assessment).
+    """
+    attempt = (
+        StudentAssessmentAttempt.objects.filter(pk=attempt_id)
+        .prefetch_related('recommended_domains')
+        .select_related('user')
+        .first()
+    )
+    if attempt is None:
+        return
+
+    snapshot, _ = StudentProgressSnapshot.objects.get_or_create(student=attempt.user)
+    primary = attempt.recommended_domains.first()
+    weights = extract_domain_weights_from_recommendation_meta(attempt.recommendation_meta)
+
+    snapshot.strongest_domain = primary
+    snapshot.domain_weights = weights
+    snapshot.current_complexity_band = 'BEGINNER'
+
+    meta = dict(snapshot.metadata) if isinstance(snapshot.metadata, dict) else {}
+    meta['domain_weights'] = weights
+    meta['assessment_attempt_id'] = attempt.id
+    meta['domain_profile_synced_at'] = timezone.now().isoformat()
+    snapshot.metadata = meta
+
+    snapshot.save(
+        update_fields=[
+            'strongest_domain',
+            'domain_weights',
+            'current_complexity_band',
+            'metadata',
+            'updated_at',
+        ]
+    )

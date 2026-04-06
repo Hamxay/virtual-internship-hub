@@ -1,5 +1,5 @@
 /**
- * Student Dashboard – FR2 skill assessment (composed MCQs, rule-based domain recommendation), tasks, career chatbot.
+ * Student Dashboard – skill assessment (composed MCQs + ML domain profile), tasks, career chatbot.
  */
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
@@ -66,7 +66,9 @@ function AssessmentStartScreen({ onStart, onBack, attemptCount, maxAttempts }) {
           <FileTextIcon className="w-8 h-8" />
         </div>
         <h2 className="quiz-start-title">Skill Assessment</h2>
-        <p className="quiz-start-subtitle">Test your knowledge and demonstrate your skills</p>
+        <p className="quiz-start-subtitle">
+          Answer MCQs across your chosen domains. We use your scores to build an AI-assisted domain profile for personalized project recommendations.
+        </p>
 
         <div className="quiz-start-row">
           <FileTextIcon className="w-5 h-5 quiz-start-row-icon" />
@@ -293,7 +295,7 @@ function SelectDomainsCard({ onSaved, refreshUser, initialSelectedIds = [] }) {
 }
 
 /* Figma-style: Results screen */
-function AssessmentResultView({ result, onBack }) {
+function AssessmentResultView({ result, onBack, onGoToTasks }) {
   const percentage = result.percentage ?? 0;
   const passed = result.passed ?? percentage >= PASSING_PERCENT;
   const score = result.score ?? 0;
@@ -303,6 +305,9 @@ function AssessmentResultView({ result, onBack }) {
   const displayTotal = questionCount > 0 ? questionCount : totalPoints;
   const displayCorrect = questionCount > 0 ? correctCount : score;
   const recommended = result.recommended_domains?.[0];
+  const meta = result.recommendation_meta;
+  const profileText = meta?.weighted_domain_profile_text;
+  const domainAdded = meta?.added_recommended_to_profile === true;
 
   return (
     <div className="quiz-screen-wrap">
@@ -345,24 +350,39 @@ function AssessmentResultView({ result, onBack }) {
           <span>70%</span>
         </div>
 
-        {passed && recommended && (
+        {passed && (recommended || profileText) && (
           <div className="quiz-note-box" style={{ marginTop: '1rem' }}>
-            <p><strong>Your recommended domain:</strong> {recommended.name}</p>
-            {result.recommendation_meta?.explanation && (
+            {recommended && (
+              <p><strong>Your recommended domain:</strong> {recommended.name}</p>
+            )}
+            {profileText && (
               <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem', color: '#374151' }}>
-                {result.recommendation_meta.explanation}
+                <strong>Weighted domain profile:</strong> {profileText}
               </p>
             )}
-            {Array.isArray(result.recommendation_meta?.ranked_domains) && result.recommendation_meta.ranked_domains.length > 1 && (
+            {meta?.explanation && (
+              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem', color: '#374151' }}>
+                {meta.explanation}
+              </p>
+            )}
+            {Array.isArray(meta?.ranked_domains) && meta.ranked_domains.length > 1 && (
               <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.8125rem', color: '#6b7280' }}>
                 <strong>How you scored by domain:</strong>{' '}
-                {result.recommendation_meta.ranked_domains
+                {meta.ranked_domains
                   .map((d) => `${d.domain_name} (${d.percentage}%)`)
                   .join(' · ')}
               </p>
             )}
-            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem' }}>This domain has been added to your profile.</p>
+            {domainAdded && (
+              <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem' }}>This domain has been added to your profile.</p>
+            )}
           </div>
+        )}
+
+        {passed && (
+          <p style={{ marginTop: '1rem', fontSize: '0.8125rem', color: '#64748b', lineHeight: 1.5, textAlign: 'center' }}>
+            Your domain mix is saved to your project profile so upcoming tasks can match your strengths.
+          </p>
         )}
 
         {!passed && (
@@ -371,9 +391,16 @@ function AssessmentResultView({ result, onBack }) {
           </div>
         )}
 
-        <button type="button" className="quiz-btn-primary" onClick={onBack} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-          <ArrowLeftIcon className="w-4 h-4" /> Back to Dashboard
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem' }}>
+          {passed && typeof onGoToTasks === 'function' && (
+            <button type="button" className="quiz-btn-primary" onClick={onGoToTasks} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+              <CheckSquareIcon className="w-4 h-4" /> Go to My Tasks
+            </button>
+          )}
+          <button type="button" className={passed && typeof onGoToTasks === 'function' ? '' : 'quiz-btn-primary'} onClick={onBack} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', ...(passed && typeof onGoToTasks === 'function' ? { padding: '0.65rem 1rem', background: 'transparent', border: '1px solid #e5e7eb', borderRadius: 8, cursor: 'pointer', color: '#475569', fontSize: '0.9375rem', fontWeight: 500 } : {}) }}>
+            <ArrowLeftIcon className="w-4 h-4" /> Back to Dashboard
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -489,7 +516,7 @@ function StudentDashboard() {
         setAttemptCount((c) => c + 1);
         if (res.data.percentage >= PASSING_PERCENT) {
           setAssessmentPassed(true);
-          if (res.data.recommended_domains?.[0]) setLastAttempt({ ...res.data, recommended_domains: res.data.recommended_domains });
+          setLastAttempt(res.data);
           if (typeof refreshUser === 'function') refreshUser();
         }
       })
@@ -523,6 +550,11 @@ function StudentDashboard() {
     if (typeof refreshUser === 'function') refreshUser();
   };
 
+  const handleResultGoToTasks = () => {
+    setActiveView('tasks');
+    handleBackToDashboard();
+  };
+
   const renderContent = () => {
     if (assessmentView === 'intro' && composedData) {
       return (
@@ -540,7 +572,9 @@ function StudentDashboard() {
           <div className="quiz-card flex flex-col items-center justify-center gap-6 py-12" style={{ maxWidth: '28rem' }}>
             <div className="w-14 h-14 rounded-full border-4 border-teal-200 border-t-teal-600 animate-spin" />
             <h3 className="text-xl font-semibold text-gray-800">Reviewing your test</h3>
-            <p className="text-gray-600 text-sm text-center">Please wait a moment while we prepare your results.</p>
+            <p className="text-gray-600 text-sm text-center">
+              Scoring your answers and updating your project profile for recommendations…
+            </p>
           </div>
         </div>
       );
@@ -564,6 +598,7 @@ function StudentDashboard() {
         <AssessmentResultView
           result={result}
           onBack={handleBackToDashboard}
+          onGoToTasks={handleResultGoToTasks}
         />
       );
     }
@@ -763,6 +798,7 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
     ? (lastAttempt.score / (lastAttempt.total_points || 1)) * 100 >= PASSING_PERCENT
     : false;
   const showRecommendation = Boolean(recommendedDomain && lastAttemptPassed);
+  const profileSummary = lastAttempt?.recommendation_meta?.weighted_domain_profile_text;
 
   return (
     <div className="dashboard-section">
@@ -792,6 +828,11 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
           <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.3)' }}>
             <span style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.85)', marginRight: '0.5rem' }}>Recommended domain (from your assessment):</span>
             <span style={{ fontWeight: 600, fontSize: '0.9375rem' }}>{recommendedDomain.name}</span>
+            {profileSummary && (
+              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.8125rem', color: 'rgba(255,255,255,0.9)', lineHeight: 1.45 }}>
+                <span style={{ opacity: 0.9 }}>Domain profile: </span>{profileSummary}
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -829,7 +870,8 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
             <div style={{ flex: 1 }}>
               <h3>Assessment Passed!</h3>
               <p>
-                Your recommended domain <strong>{recommendedDomain.name}</strong> is set. We&apos;ve unlocked beginner-level tasks for you.
+                Your recommended domain <strong>{recommendedDomain.name}</strong> is set, and your domain profile is synced for personalized picks.
+                Beginner-level tasks are unlocked when your assessment matches your current target domains.
               </p>
             </div>
           </div>

@@ -10,6 +10,10 @@ from projects.models import (
     StudentProgressSnapshot,
     StudentProjectAssignment,
 )
+from projects.services.domain_profile import (
+    ASSESSMENT_SNAPSHOT_META_KEYS,
+    snapshot_domain_weight_percent,
+)
 
 
 COMPLEXITY_ORDER = {
@@ -81,7 +85,10 @@ def update_student_progress_snapshot(student):
     snapshot.completed_projects = sum(1 for a in assignments if a.status == 'COMPLETED')
     snapshot.average_score = average_score
     snapshot.current_complexity_band = complexity
-    snapshot.metadata = StudentProgressSnapshot.build_metadata(scored)
+    base_meta = StudentProgressSnapshot.build_metadata(scored)
+    prev = snapshot.metadata if isinstance(snapshot.metadata, dict) else {}
+    assessment_meta_preserve = {k: prev[k] for k in ASSESSMENT_SNAPSHOT_META_KEYS if k in prev}
+    snapshot.metadata = {**base_meta, **assessment_meta_preserve}
     snapshot.save()
     return snapshot
 
@@ -178,6 +185,9 @@ def refresh_recommended_assignments(student, limit=5):
             continue
 
         domain_match = _domain_match_score(template, target_domain_ids, recommended_domain_id)
+        profile_w = snapshot_domain_weight_percent(snapshot, template.domain_id)
+        if profile_w is not None:
+            domain_match = round(domain_match * 0.55 + profile_w * 0.45, 2)
         assessment_strength = _safe_percentage(latest_assessment, template.domain_id) if latest_assessment else 55.0
         progress_readiness = _progress_readiness_score(template, snapshot, domain_history)
         difficulty_fit = _difficulty_fit_score(template, inferred_band, snapshot)
@@ -196,6 +206,7 @@ def refresh_recommended_assignments(student, limit=5):
                 template,
                 {
                     'domain_match_score': round(domain_match, 2),
+                    'domain_profile_weight_percent': round(profile_w, 2) if profile_w is not None else None,
                     'assessment_strength_score': round(assessment_strength, 2),
                     'progress_readiness_score': round(progress_readiness, 2),
                     'difficulty_fit_score': round(difficulty_fit, 2),
