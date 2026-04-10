@@ -1,0 +1,33 @@
+[
+  {
+    "domain_code": "WEB_DEVELOPMENT",
+    "title": "JSON Import Example — Starter API",
+    "short_description": "Replace domain_code with a real code from your domains table.",
+    "business_problem": "A small business needs a simple REST API for inventory.",
+    "complexity": "BEGINNER",
+    "submission_type": "CODE",
+    "estimated_hours": 8,
+    "tags": ["web", "api", "beginner"],
+    "prerequisite_skills": ["HTTP basics", "Python or Node"],
+    "expected_keywords": ["REST", "JSON", "testing"],
+    "active": true,
+    "instruction": {
+      "overview": "Build a minimal CRUD API with clear routes and basic tests.",
+      "steps": [
+        "Define resources and routes.",
+        "Implement create/read/update/delete.",
+        "Add simple automated tests or manual test checklist."
+      ],
+      "deliverables": ["Source repository or zip", "README with run instructions"],
+      "submission_requirements": ["Link to repo or upload artifact", "Short reflection"],
+      "starter_resources": ["Framework quickstart docs"],
+      "evaluation_notes": "Grade on correctness, clarity, and completeness."
+    },
+    "rubric": {
+      "passing_score": 70,
+      "allow_auto_accept": true,
+      "plagiarism_threshold": 75.0,
+      "grammar_weight": 15.0
+    }
+  }
+]

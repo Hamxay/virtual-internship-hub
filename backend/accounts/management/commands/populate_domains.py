@@ -44,9 +44,6 @@ class Command(BaseCommand):
             {'name': 'Cybersecurity', 'code': 'CYBERSECURITY', 'description': 'Cybersecurity and information security'},
             {'name': 'Game Development', 'code': 'GAME_DEVELOPMENT', 'description': 'Game development and design'},
             {'name': 'Blockchain Development', 'code': 'BLOCKCHAIN_DEVELOPMENT', 'description': 'Blockchain and cryptocurrency development'},
-            
-            # Other
-            {'name': 'Other', 'code': 'OTHER', 'description': 'Other domains not listed'},
             # Design
             {'name': 'UI/UX Design', 'code': 'UI_UX_DESIGN', 'description': 'User interface and user experience design'},
         ]

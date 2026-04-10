@@ -286,3 +286,15 @@ JAZZMIN_UI_TWEAKS = {
     "actions_sticky_top": True,
 }
 
+# --- Celery (async tasks: FR4 evaluation) ---
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default=CELERY_BROKER_URL)
+CELERY_TASK_ALWAYS_EAGER = config('CELERY_TASK_ALWAYS_EAGER', default=False, cast=bool)
+CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+
+# --- Google Gemini (FR4 AI evaluator) ---
+GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
+

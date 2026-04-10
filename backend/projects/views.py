@@ -3,11 +3,13 @@ from datetime import timedelta
 from django.db.models import Avg, Count
 from django.utils import timezone
 from rest_framework import generics, permissions, status
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import IsAdministrator, IsStudent
 from .models import ProjectSubmission, ProjectTemplate, StudentProjectAssignment
+from .pagination import ProjectTemplatePagination
 from .serializers import (
     AdminAssignProjectSerializer,
     ProjectSubmissionCreateSerializer,
@@ -16,7 +18,7 @@ from .serializers import (
     StudentProgressSnapshotSerializer,
     StudentProjectAssignmentSerializer,
 )
-from .services.evaluation import evaluate_submission
+from .tasks import async_evaluate_submission
 from .services.recommendation import refresh_recommended_assignments, update_student_progress_snapshot
 
 
@@ -24,6 +26,7 @@ class AdminProjectTemplateListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated, IsAdministrator]
     serializer_class = ProjectTemplateSerializer
     queryset = ProjectTemplate.objects.select_related('domain', 'instruction', 'rubric').all()
+    pagination_class = ProjectTemplatePagination
 
 
 class AdminProjectTemplateDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -60,9 +63,33 @@ class StudentRecommendedProjectsView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsStudent]
 
     def get(self, request):
-        assignments = refresh_recommended_assignments(request.user)
-        serializer = StudentProjectAssignmentSerializer(assignments, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        refresh_recommended_assignments(request.user)
+        assignment_queryset = (
+            StudentProjectAssignment.objects.filter(
+                student=request.user,
+                status='RECOMMENDED',
+            )
+            .select_related(
+                'project_template__domain',
+                'project_template__instruction',
+                'project_template__rubric',
+            )
+            .prefetch_related('submissions__evaluations')
+        )
+        content_based_assignments = assignment_queryset.filter(
+            recommendation_source__in=['COLD_START', 'CONTENT_BASED'],
+        ).order_by('-assigned_at')
+        collaborative_assignments = assignment_queryset.filter(
+            recommendation_source='COLLABORATIVE',
+        ).order_by('-assigned_at')
+        serializer = StudentProjectAssignmentSerializer
+        return Response(
+            {
+                'content_based': serializer(content_based_assignments, many=True).data,
+                'collaborative': serializer(collaborative_assignments, many=True).data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class StudentAssignmentListView(generics.ListAPIView):
@@ -106,6 +133,7 @@ class StudentAcceptProjectView(APIView):
 
 class StudentSubmissionCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsStudent]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request, pk):
         assignment = (
@@ -116,17 +144,16 @@ class StudentSubmissionCreateView(APIView):
         if not assignment:
             return Response({'detail': 'Assignment not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        serializer = ProjectSubmissionCreateSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
         version = assignment.submissions.count() + 1
-        submission = ProjectSubmission.objects.create(
-            assignment=assignment,
-            version=version,
-            **serializer.validated_data,
+        serializer = ProjectSubmissionCreateSerializer(
+            data=request.data,
+            context={'assignment': assignment, 'version': version},
         )
+        serializer.is_valid(raise_exception=True)
+        submission = serializer.save()
         assignment.status = 'SUBMITTED'
         assignment.save(update_fields=['status'])
-        evaluate_submission(submission)
+        async_evaluate_submission.delay(submission.pk)
         submission.refresh_from_db()
         return Response(ProjectSubmissionSerializer(submission).data, status=status.HTTP_201_CREATED)
 

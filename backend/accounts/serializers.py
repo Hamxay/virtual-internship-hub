@@ -142,37 +142,9 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return value
     
     def create(self, validated_data):
-        validated_data.pop('password_confirm')
-        role = validated_data.pop('role', 'STUDENT')
-        
-        first_name = validated_data.pop('first_name', None)
-        last_name = validated_data.pop('last_name', None)
-        target_domain_ids = validated_data.pop('target_domain_ids', [])
-        current_skill_level = validated_data.pop('current_skill_level', None)
-        professional_bio = validated_data.pop('professional_bio', None)
-        expertise_domain_id = validated_data.pop('expertise_domain_id', None)
-        
-        user = User.objects.create_user(role=role, **validated_data)
-        
-        # Update profile (signal creates it, we just update)
-        if role == 'STUDENT' and hasattr(user, 'student_profile'):
-            user.student_profile.first_name = first_name or user.username
-            user.student_profile.last_name = last_name or ''
-            user.student_profile.current_skill_level = current_skill_level
-            user.student_profile.save()
-            # Add target domains
-            if target_domain_ids:
-                domains = Domain.objects.filter(id__in=target_domain_ids)
-                user.student_profile.target_domains.set(domains)
-        elif role == 'MENTOR' and hasattr(user, 'mentor_profile'):
-            user.mentor_profile.professional_bio = professional_bio or ''
-            if expertise_domain_id:
-                domain = Domain.objects.get(id=expertise_domain_id)
-                user.mentor_profile.expertise_domain = domain
-            user.mentor_profile.save()
-        
-        return user
+        from .services.registration import create_user_from_verified_signup_payload
 
+        return create_user_from_verified_signup_payload(validated_data)
 
 class CreateAdministratorSerializer(serializers.Serializer):
     """Create an administrator (role=ADMINISTRATOR, is_staff=True, is_superuser=False). Superuser-only."""

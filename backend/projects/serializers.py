@@ -1,8 +1,12 @@
+import json
+from pathlib import Path
+
 from rest_framework import serializers
 
 from accounts.models import Domain, User
 from accounts.serializers import DomainSerializer
 from .models import (
+    FILE_SUBMISSION_TYPES,
     EvaluationRubric,
     ProjectInstruction,
     ProjectSubmission,
@@ -12,6 +16,13 @@ from .models import (
     SubmissionEvaluation,
 )
 
+
+# FR4 uploads — align with extractor + Gemini multimodal types
+MAX_SUBMISSION_UPLOAD_BYTES = 15 * 1024 * 1024
+ALLOWED_SUBMISSION_UPLOAD_SUFFIXES = frozenset({
+    '.pdf', '.doc', '.docx', '.xlsx', '.xls', '.txt',
+    '.png', '.jpg', '.jpeg', '.gif', '.webp',  # .doc: allowed upload; text extraction may be limited
+})
 
 DEFAULT_RUBRIC_CRITERIA = [
     {'key': 'correctness', 'label': 'Correctness', 'description': 'Meets the task requirements.', 'weight': 40},
@@ -163,6 +174,7 @@ class ProjectSubmissionSerializer(serializers.ModelSerializer):
             'version',
             'repository_url',
             'artifact_url',
+            'uploaded_file',
             'submission_text',
             'notes',
             'submitted_files',
@@ -171,26 +183,115 @@ class ProjectSubmissionSerializer(serializers.ModelSerializer):
             'submitted_at',
             'evaluations',
         )
-        read_only_fields = ('id', 'version', 'metadata', 'status', 'submitted_at', 'evaluations')
+        read_only_fields = (
+            'id',
+            'version',
+            'metadata',
+            'status',
+            'submitted_at',
+            'evaluations',
+            'uploaded_file',
+        )
 
 
 class ProjectSubmissionCreateSerializer(serializers.ModelSerializer):
+    uploaded_file = serializers.FileField(required=False, allow_null=True)
+
     class Meta:
         model = ProjectSubmission
         fields = (
             'repository_url',
             'artifact_url',
+            'uploaded_file',
             'submission_text',
             'notes',
             'submitted_files',
         )
 
+    def validate_submitted_files(self, value):
+        if value in (None, '', []):
+            return []
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return []
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise serializers.ValidationError('Must be a valid JSON array of strings.') from exc
+            if not isinstance(parsed, list):
+                raise serializers.ValidationError('Must be a JSON array.')
+            return [str(x).strip() for x in parsed if str(x).strip()]
+        if isinstance(value, list):
+            return [str(x).strip() for x in value if str(x).strip()]
+        raise serializers.ValidationError('Invalid format.')
+
     def validate(self, attrs):
-        if not attrs.get('repository_url') and not attrs.get('artifact_url') and not attrs.get('submission_text'):
-            raise serializers.ValidationError(
-                'Provide at least one of repository URL, artifact URL, or submission text.'
-            )
+        assignment = self.context.get('assignment')
+        if assignment is None:
+            raise serializers.ValidationError('Assignment context is required.')
+
+        template = assignment.project_template
+        submission_type = template.submission_type
+        repository_url = (attrs.get('repository_url') or '').strip() if attrs.get('repository_url') else ''
+        attrs['repository_url'] = repository_url
+        uploaded_file = attrs.get('uploaded_file')
+        has_upload = bool(uploaded_file)
+
+        if submission_type == 'CODE':
+            if not repository_url:
+                raise serializers.ValidationError(
+                    {'repository_url': 'Code submissions require a repository URL.'}
+                )
+            if has_upload:
+                raise serializers.ValidationError(
+                    {'uploaded_file': 'Do not upload a file for CODE submissions.'}
+                )
+        elif submission_type in FILE_SUBMISSION_TYPES:
+            if not has_upload:
+                raise serializers.ValidationError(
+                    {'uploaded_file': 'This project type requires an uploaded file.'}
+                )
+            if repository_url:
+                raise serializers.ValidationError(
+                    {'repository_url': 'File-based submissions must not include a repository URL.'}
+                )
+            size = getattr(uploaded_file, 'size', None)
+            if size is not None and size > MAX_SUBMISSION_UPLOAD_BYTES:
+                raise serializers.ValidationError(
+                    {'uploaded_file': f'File too large (max {MAX_SUBMISSION_UPLOAD_BYTES // (1024 * 1024)} MB).'}
+                )
+            name = getattr(uploaded_file, 'name', '') or ''
+            suffix = Path(name).suffix.lower()
+            if suffix not in ALLOWED_SUBMISSION_UPLOAD_SUFFIXES:
+                raise serializers.ValidationError(
+                    {
+                        'uploaded_file': (
+                            f'Unsupported type ({suffix or "unknown"}). '
+                            f'Allowed: {", ".join(sorted(ALLOWED_SUBMISSION_UPLOAD_SUFFIXES))}'
+                        )
+                    }
+                )
+        else:
+            if (
+                not repository_url
+                and not (attrs.get('artifact_url') or '').strip()
+                and not (attrs.get('submission_text') or '').strip()
+                and not has_upload
+            ):
+                raise serializers.ValidationError(
+                    'Provide repository URL, artifact URL, submission text, or an uploaded file.'
+                )
         return attrs
+
+    def create(self, validated_data):
+        assignment = self.context['assignment']
+        version = self.context.get('version', 1)
+        validated_data.setdefault('submitted_files', [])
+        instance = ProjectSubmission(assignment=assignment, version=version, **validated_data)
+        instance.full_clean()
+        instance.save()
+        return instance
 
 
 class StudentProjectAssignmentSerializer(serializers.ModelSerializer):
@@ -204,6 +305,7 @@ class StudentProjectAssignmentSerializer(serializers.ModelSerializer):
             'project_template',
             'status',
             'recommended_by',
+            'recommendation_source',
             'recommendation_score',
             'recommendation_reason',
             'assigned_at',

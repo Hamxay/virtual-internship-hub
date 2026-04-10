@@ -4,23 +4,34 @@ from statistics import mean
 from django.utils import timezone
 
 from accounts.models import Domain
-from assessments.models import StudentAssessmentAttempt
-from projects.models import (
-    ProjectTemplate,
-    StudentProgressSnapshot,
-    StudentProjectAssignment,
-)
-from projects.services.domain_profile import (
-    ASSESSMENT_SNAPSHOT_META_KEYS,
-    snapshot_domain_weight_percent,
-)
+from projects.models import StudentProgressSnapshot, StudentProjectAssignment
+from projects.services.domain_profile import ASSESSMENT_SNAPSHOT_META_KEYS
+from projects.services.hybrid_recommender import HybridRecommender, resolve_recommendation_top_n
 
 
-COMPLEXITY_ORDER = {
-    'BEGINNER': 0,
-    'INTERMEDIATE': 1,
-    'ADVANCED': 2,
-}
+def _successful_tags_from_completed_assignments(assignments):
+    """
+    Union of ``ProjectTemplate.tags`` for COMPLETED assignments, de-duplicated
+    (case-insensitive), order preserved by first occurrence.
+    """
+    seen = set()
+    out = []
+    for assignment in assignments:
+        if assignment.status != 'COMPLETED':
+            continue
+        tags = getattr(assignment.project_template, 'tags', None) or []
+        if not isinstance(tags, list):
+            continue
+        for raw in tags:
+            label = str(raw).strip()
+            if not label:
+                continue
+            key = label.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(label)
+    return out
 
 SKILL_TO_COMPLEXITY = {
     'BEGINNER': 'BEGINNER',
@@ -29,13 +40,36 @@ SKILL_TO_COMPLEXITY = {
     'EXPERT': 'ADVANCED',
 }
 
+COMPLEXITY_RANK = {
+    'BEGINNER': 0,
+    'INTERMEDIATE': 1,
+    'ADVANCED': 2,
+}
 
-def _safe_percentage(attempt, domain_id):
-    ranked = (attempt.recommendation_meta or {}).get('ranked_domains') or []
-    for item in ranked:
-        if int(item.get('domain_id', 0)) == int(domain_id):
-            return float(item.get('percentage', 0))
-    return 0.0
+
+def apply_fr4_recommended_difficulty_if_higher(student, recommended_raw: str) -> None:
+    """
+    After FR4 Gemini evaluation, raise ``StudentProgressSnapshot.current_complexity_band``
+    when the model recommends a strictly higher difficulty than the refreshed snapshot band.
+    """
+    rec = str(recommended_raw or 'BEGINNER').upper().strip()
+    if rec not in COMPLEXITY_RANK:
+        rec = 'BEGINNER'
+    snapshot = StudentProgressSnapshot.objects.filter(student=student).first()
+    if not snapshot:
+        return
+    cur = str(snapshot.current_complexity_band or 'BEGINNER').upper().strip()
+    if cur not in COMPLEXITY_RANK:
+        cur = 'BEGINNER'
+    if COMPLEXITY_RANK[rec] <= COMPLEXITY_RANK[cur]:
+        return
+    snapshot.current_complexity_band = rec
+    prev_meta = snapshot.metadata if isinstance(snapshot.metadata, dict) else {}
+    snapshot.metadata = {
+        **prev_meta,
+        'fr4_recommended_next_difficulty': rec,
+    }
+    snapshot.save(update_fields=['current_complexity_band', 'metadata', 'updated_at'])
 
 
 def infer_student_complexity_band(student, snapshot=None):
@@ -86,164 +120,88 @@ def update_student_progress_snapshot(student):
     snapshot.average_score = average_score
     snapshot.current_complexity_band = complexity
     base_meta = StudentProgressSnapshot.build_metadata(scored)
+    successful_tags = _successful_tags_from_completed_assignments(assignments)
     prev = snapshot.metadata if isinstance(snapshot.metadata, dict) else {}
     assessment_meta_preserve = {k: prev[k] for k in ASSESSMENT_SNAPSHOT_META_KEYS if k in prev}
-    snapshot.metadata = {**base_meta, **assessment_meta_preserve}
+    snapshot.metadata = {
+        **base_meta,
+        'successful_tags': successful_tags,
+        **assessment_meta_preserve,
+    }
     snapshot.save()
     return snapshot
 
 
-def _latest_assessment(student):
-    return (
-        StudentAssessmentAttempt.objects.filter(user=student)
-        .prefetch_related('recommended_domains', 'test_domains')
-        .order_by('-submitted_at')
-        .first()
-    )
+def _build_content_feed_reason(template, breakdown: dict) -> str:
+    if breakdown.get('mode') == 'cold_start':
+        domain_weight = breakdown.get('domain_weight_percent')
+        weight_label = (
+            f'{domain_weight:.0f}% domain fit' if domain_weight is not None else 'assessment-aligned domain'
+        )
+        return (
+            f'Starter project matched to your assessment weights ({weight_label}). '
+            f'Domain: {template.domain.name}.'
+        )
+
+    content_norm = breakdown.get('content_norm', 0.0)
+    reason_parts = [
+        f'Content-based match (your completed project tags; score {content_norm:.2f}).',
+    ]
+    if breakdown.get('content_similarity', 0) > 0:
+        reason_parts.append(f'Tag overlap {breakdown["content_similarity"]:.2f}.')
+    return ' '.join(reason_parts)
 
 
-def _domain_match_score(template, target_domain_ids, recommended_domain_id):
-    if recommended_domain_id and template.domain_id == recommended_domain_id:
-        return 100.0
-    if template.domain_id in target_domain_ids:
-        return 82.0
-    return 35.0 if not target_domain_ids else 15.0
-
-
-def _difficulty_fit_score(template, inferred_band, snapshot):
-    target_rank = COMPLEXITY_ORDER.get(inferred_band, 0)
-    template_rank = COMPLEXITY_ORDER.get(template.complexity, 0)
-    gap = template_rank - target_rank
-    if gap == 0:
-        return 100.0
-    if gap == -1:
-        return 76.0
-    if gap == 1 and snapshot.average_score >= 78:
-        return 84.0
-    if gap == 1:
-        return 55.0
-    if gap >= 2:
-        return 28.0
-    return 48.0
-
-
-def _progress_readiness_score(template, snapshot, domain_history):
-    completed_in_domain = domain_history.get(template.domain_id, 0)
-    if completed_in_domain == 0:
-        return 65.0
-    if snapshot.average_score >= 80:
-        return 90.0
-    if snapshot.average_score >= 65:
-        return 72.0
-    return 52.0
-
-
-def _diversity_penalty(template, assigned_template_ids, completed_template_ids):
-    if template.id in completed_template_ids:
-        return 55.0
-    if template.id in assigned_template_ids:
-        return 25.0
-    return 0.0
-
-
-def refresh_recommended_assignments(student, limit=5):
+def refresh_recommended_assignments(student, limit=None):
+    """
+    FR3 wipe-and-replace: delete all RECOMMENDED rows, then create separated feeds
+    (content vs collaborative) with ``recommendation_source`` set.
+    """
     snapshot = update_student_progress_snapshot(student)
-    latest_assessment = _latest_assessment(student)
-    profile = getattr(student, 'student_profile', None)
-    target_domain_ids = set(profile.target_domains.values_list('id', flat=True)) if profile else set()
-    recommended_domain_id = None
-    if latest_assessment:
-        recommended = latest_assessment.recommended_domains.first()
-        recommended_domain_id = recommended.id if recommended else None
+    if limit is None:
+        limit = resolve_recommendation_top_n(student, snapshot)
 
-    active_assignments = StudentProjectAssignment.objects.filter(
+    StudentProjectAssignment.objects.filter(
         student=student,
-    ).exclude(status='COMPLETED')
-    assigned_template_ids = set(active_assignments.values_list('project_template_id', flat=True))
-    completed_template_ids = set(
-        StudentProjectAssignment.objects.filter(
-            student=student,
-            status='COMPLETED',
-        ).values_list('project_template_id', flat=True)
-    )
+        status='RECOMMENDED',
+    ).delete()
 
-    domain_history = defaultdict(int)
-    for assignment in StudentProjectAssignment.objects.filter(student=student, status='COMPLETED').select_related('project_template'):
-        domain_history[assignment.project_template.domain_id] += 1
+    recommender = HybridRecommender()
+    feeds_with_scores = recommender.collect_separated_feeds(student, top_n=limit)
 
-    inferred_band = infer_student_complexity_band(student, snapshot=snapshot)
+    for template, normalized_score, breakdown in feeds_with_scores['content_based']:
+        if breakdown.get('mode') == 'cold_start':
+            recommendation_source = 'COLD_START'
+            recommendation_score = 100.0
+        else:
+            recommendation_source = 'CONTENT_BASED'
+            recommendation_score = round(float(normalized_score) * 100.0, 2)
 
-    templates = ProjectTemplate.objects.filter(active=True).select_related('domain', 'instruction', 'rubric')
-    if target_domain_ids:
-        templates = templates.filter(domain_id__in=target_domain_ids | ({recommended_domain_id} if recommended_domain_id else set()))
-
-    scored_candidates = []
-    for template in templates:
-        if template.id in completed_template_ids:
-            continue
-        if template.id in assigned_template_ids and template.id not in completed_template_ids:
-            continue
-
-        domain_match = _domain_match_score(template, target_domain_ids, recommended_domain_id)
-        profile_w = snapshot_domain_weight_percent(snapshot, template.domain_id)
-        if profile_w is not None:
-            domain_match = round(domain_match * 0.55 + profile_w * 0.45, 2)
-        assessment_strength = _safe_percentage(latest_assessment, template.domain_id) if latest_assessment else 55.0
-        progress_readiness = _progress_readiness_score(template, snapshot, domain_history)
-        difficulty_fit = _difficulty_fit_score(template, inferred_band, snapshot)
-        diversity_penalty = _diversity_penalty(template, assigned_template_ids, completed_template_ids)
-        recommendation_score = round(
-            (domain_match * 0.35)
-            + (assessment_strength * 0.25)
-            + (progress_readiness * 0.20)
-            + (difficulty_fit * 0.20)
-            - diversity_penalty,
-            2,
-        )
-        scored_candidates.append(
-            (
-                recommendation_score,
-                template,
-                {
-                    'domain_match_score': round(domain_match, 2),
-                    'domain_profile_weight_percent': round(profile_w, 2) if profile_w is not None else None,
-                    'assessment_strength_score': round(assessment_strength, 2),
-                    'progress_readiness_score': round(progress_readiness, 2),
-                    'difficulty_fit_score': round(difficulty_fit, 2),
-                    'diversity_penalty': round(diversity_penalty, 2),
-                },
-            )
-        )
-
-    scored_candidates.sort(key=lambda item: item[0], reverse=True)
-    selected = scored_candidates[:limit]
-    results = []
-    for score, template, breakdown in selected:
-        reason_text = (
-            f'{template.domain.name} is a strong fit right now. '
-            f'Domain match {breakdown["domain_match_score"]:.0f}, '
-            f'assessment strength {breakdown["assessment_strength_score"]:.0f}, '
-            f'difficulty fit {breakdown["difficulty_fit_score"]:.0f}.'
-        )
-        assignment, created = StudentProjectAssignment.objects.get_or_create(
+        StudentProjectAssignment.objects.create(
             student=student,
             project_template=template,
-            defaults={
-                'status': 'RECOMMENDED',
-                'recommended_by': 'AI',
-                'recommendation_score': score,
-                'recommendation_reason': reason_text,
-            },
+            status='RECOMMENDED',
+            recommended_by='AI',
+            recommendation_score=recommendation_score,
+            recommendation_reason=_build_content_feed_reason(template, breakdown),
+            recommendation_source=recommendation_source,
         )
-        if not created and assignment.status == 'RECOMMENDED':
-            assignment.recommended_by = 'AI'
-            assignment.recommendation_score = score
-            assignment.recommendation_reason = reason_text
-            assignment.save(
-                update_fields=['recommended_by', 'recommendation_score', 'recommendation_reason'],
-            )
-        results.append(assignment)
+
+    for template, _normalized_score, breakdown in feeds_with_scores['collaborative']:
+        collaborative_raw = float(breakdown.get('collaborative_raw', 0.0))
+        reason_text = (
+            f'Collaborative filtering (predicted performance ~{collaborative_raw:.1f}/100). '
+            f'Domain: {template.domain.name}.'
+        )
+        StudentProjectAssignment.objects.create(
+            student=student,
+            project_template=template,
+            status='RECOMMENDED',
+            recommended_by='AI',
+            recommendation_score=round(collaborative_raw, 2),
+            recommendation_reason=reason_text,
+            recommendation_source='COLLABORATIVE',
+        )
 
     snapshot.last_recommended_at = timezone.now()
     snapshot.save(update_fields=['last_recommended_at', 'updated_at'])
-    return results

@@ -2,6 +2,7 @@ import uuid
 from collections import Counter
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from django.utils.text import slugify
@@ -14,9 +15,12 @@ PROJECT_COMPLEXITY_CHOICES = [
 ]
 
 SUBMISSION_TYPE_CHOICES = [
-    ('CODE', 'Code'),
-    ('DOCUMENT', 'Document'),
-    ('DESIGN', 'Design'),
+    ('CODE', 'Code (repo / implementation)'),
+    ('DOCUMENT', 'Document (general written deliverable)'),
+    ('DESIGN', 'Design (visual / UX / creative)'),
+    ('PDF', 'PDF file'),
+    ('WORD', 'Word / DOCX'),
+    ('SPREADSHEET', 'Spreadsheet (e.g. Excel, Sheets)'),
 ]
 
 ASSIGNMENT_STATUS_CHOICES = [
@@ -33,10 +37,22 @@ SUBMISSION_STATUS_CHOICES = [
     ('FLAGGED', 'Flagged'),
 ]
 
+# Submission types that require an uploaded artifact (not a code repository URL).
+FILE_SUBMISSION_TYPES = frozenset(
+    {'DOCUMENT', 'DESIGN', 'PDF', 'WORD', 'SPREADSHEET'},
+)
+
 EVALUATION_DECISION_CHOICES = [
     ('ACCEPTED', 'Accepted'),
     ('REVISE_AND_RESUBMIT', 'Revise And Resubmit'),
     ('NEEDS_MENTOR_REVIEW', 'Needs Mentor Review'),
+]
+
+# FR3 separated feeds: how the row was produced (nullable for legacy / admin rows).
+RECOMMENDATION_SOURCE_CHOICES = [
+    ('COLD_START', 'Cold start'),
+    ('CONTENT_BASED', 'Content based'),
+    ('COLLABORATIVE', 'Collaborative'),
 ]
 
 
@@ -145,6 +161,13 @@ class StudentProjectAssignment(models.Model):
     recommended_by = models.CharField(max_length=50, default='AI')
     recommendation_score = models.FloatField(default=0.0)
     recommendation_reason = models.TextField(blank=True)
+    recommendation_source = models.CharField(
+        max_length=20,
+        choices=RECOMMENDATION_SOURCE_CHOICES,
+        null=True,
+        blank=True,
+        help_text='FR3 feed: cold start, tag/content similarity, or collaborative filtering.',
+    )
     assigned_at = models.DateTimeField(auto_now_add=True)
     accepted_at = models.DateTimeField(null=True, blank=True)
     due_date = models.DateTimeField(null=True, blank=True)
@@ -180,6 +203,12 @@ class ProjectSubmission(models.Model):
     version = models.PositiveIntegerField(default=1)
     repository_url = models.URLField(blank=True)
     artifact_url = models.URLField(blank=True)
+    uploaded_file = models.FileField(
+        upload_to='submissions/%Y/%m/',
+        null=True,
+        blank=True,
+        help_text='Required for document/design/spreadsheet uploads; not used for CODE.',
+    )
     submission_text = models.TextField(blank=True)
     notes = models.TextField(blank=True)
     submitted_files = models.JSONField(default=list, blank=True)
@@ -197,6 +226,26 @@ class ProjectSubmission(models.Model):
 
     def __str__(self):
         return f'Submission {self.assignment_id} v{self.version}'
+
+    def clean(self):
+        super().clean()
+        if not self.assignment_id:
+            return
+        template = self.assignment.project_template
+        submission_type = template.submission_type
+        repo = (self.repository_url or '').strip()
+        has_upload = bool(self.uploaded_file and getattr(self.uploaded_file, 'name', None))
+
+        if submission_type == 'CODE':
+            if not repo:
+                raise ValidationError({'repository_url': 'Code submissions require a repository URL.'})
+            if has_upload:
+                raise ValidationError({'uploaded_file': 'Code submissions must not include an uploaded file.'})
+        elif submission_type in FILE_SUBMISSION_TYPES:
+            if not has_upload:
+                raise ValidationError({'uploaded_file': 'This project type requires an uploaded file.'})
+            if repo:
+                raise ValidationError({'repository_url': 'File-based submissions must not include a repository URL.'})
 
 
 class SubmissionEvaluation(models.Model):
@@ -267,6 +316,23 @@ class StudentProgressSnapshot(models.Model):
 
     def __str__(self):
         return f'Progress snapshot for {self.student_id}'
+
+    def get_allowed_difficulties(self):
+        """
+        Allowed ``ProjectTemplate.complexity`` values for recommendations from this snapshot.
+
+        Progression uses ``completed_projects`` and ``average_score`` on the snapshot.
+        """
+        completed_count = int(self.completed_projects or 0)
+        average_score = float(self.average_score or 0.0)
+
+        if completed_count <= 2:
+            return ['BEGINNER']
+        if 3 <= completed_count <= 5 and average_score >= 75.0:
+            return ['BEGINNER', 'INTERMEDIATE']
+        if completed_count >= 6 and average_score >= 85.0:
+            return ['BEGINNER', 'INTERMEDIATE', 'ADVANCED']
+        return ['BEGINNER']
 
     @classmethod
     def build_metadata(cls, assignments):
