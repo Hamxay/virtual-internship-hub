@@ -161,6 +161,8 @@ class SubmissionEvaluationSerializer(serializers.ModelSerializer):
             'decision',
             'feedback_summary',
             'reviewed_at',
+            'mentor_feedback',
+            'is_human_reviewed',
         )
 
 

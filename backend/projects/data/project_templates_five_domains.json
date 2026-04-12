@@ -12956,7 +12956,7 @@
     }
   },
   {
-    "domain_code": "UI_UX_DESIGN",
+    "domain_code": "UI/UX",
     "title": "User Persona & Empathy Mapping",
     "short_description": "Create a detailed user persona and empathy map to guide a product's design direction.",
     "business_problem": "A startup is building a fitness app for 'everyone,' which is too broad. They are failing to solve specific user pain points because they don't know who they are designing for.",
@@ -13041,7 +13041,7 @@
     }
   },
   {
-    "domain_code": "UI_UX_DESIGN",
+    "domain_code": "UI/UX",
     "title": "Color Palette & Typography System",
     "short_description": "Develop a cohesive visual identity system including a color palette and font hierarchy.",
     "business_problem": "A brand's interface feels inconsistent and unprofessional because they use random colors and different fonts on every page.",
@@ -13127,7 +13127,7 @@
     }
   },
   {
-    "domain_code": "UI_UX_DESIGN",
+    "domain_code": "UI/UX",
     "title": "Low-Fidelity Wireframing",
     "short_description": "Draft the layout and user flow of a 3-screen mobile app without visual styling.",
     "business_problem": "Developers are wasting time coding features that don't make sense. The team needs a fast way to visualize the layout before investing in high-fidelity design.",
@@ -13212,7 +13212,7 @@
     }
   },
   {
-    "domain_code": "UI_UX_DESIGN",
+    "domain_code": "UI/UX",
     "title": "High-Fidelity Mobile UI Mockups",
     "short_description": "Transform wireframes into polished, high-fidelity UI designs using images, icons, and real content.",
     "business_problem": "The development team is ready to build, but they don't have a pixel-perfect reference for margins, spacing, or visual assets.",
@@ -13299,7 +13299,7 @@
     }
   },
   {
-    "domain_code": "UI_UX_DESIGN",
+    "domain_code": "UI/UX",
     "title": "Interactive Figma Prototype",
     "short_description": "Link UI screens together to create a clickable prototype that simulates real app behavior.",
     "business_problem": "Static images can't explain how a user moves from Screen A to Screen B. The client needs to 'feel' the app's transitions before development begins.",
@@ -13385,7 +13385,7 @@
     }
   },
   {
-    "domain_code": "UI_UX_DESIGN",
+    "domain_code": "UI/UX",
     "title": "UI Accessibility & WCAG Audit",
     "short_description": "Perform a professional audit on an existing interface to identify and fix accessibility barriers.",
     "business_problem": "A company is at risk of losing users because their website is not usable by people with visual impairments. An audit is needed to identify non-compliant elements.",
@@ -13470,7 +13470,7 @@
     }
   },
   {
-    "domain_code": "UI_UX_DESIGN",
+    "domain_code": "UI/UX",
     "title": "Information Architecture & Sitemap",
     "short_description": "Organize a complex website's content into a logical hierarchy and visual sitemap.",
     "business_problem": "Users are getting lost on a university website because the menu is cluttered. A restructuring is needed for better findability.",
@@ -13555,7 +13555,7 @@
     }
   },
   {
-    "domain_code": "UI_UX_DESIGN",
+    "domain_code": "UI/UX",
     "title": "UI Component Library Construction",
     "short_description": "Build a reusable library of UI components (buttons, inputs, cards) using Figma 'Variants'.",
     "business_problem": "Designers are creating slightly different versions of the same button across different screens, making the app look messy and doubling developer work.",
@@ -13641,7 +13641,7 @@
     }
   },
   {
-    "domain_code": "UI_UX_DESIGN",
+    "domain_code": "UI/UX",
     "title": "Complete UI/UX Portfolio Case Study",
     "short_description": "Document the entire design process for a product, from initial research to final high-fidelity designs.",
     "business_problem": "Designers often show final screens but fail to explain their thinking. Employers want to see the 'Why' behind decisions to prove problem-solving ability.",
@@ -13728,7 +13728,7 @@
     }
   },
   {
-    "domain_code": "UI_UX_DESIGN",
+    "domain_code": "UI/UX",
     "title": "Design System Documentation",
     "short_description": "Create a formal Design System guide including design tokens, usage rules, and component documentation.",
     "business_problem": "As a design team grows, 'tribal knowledge' is lost. A formal Design System is required so any new designer can replicate the brand perfectly.",

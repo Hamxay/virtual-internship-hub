@@ -1124,6 +1124,345 @@
   text-decoration: underline;
 }
 
+/* Mentor FR5 — review queue */
+.mentor-review-layout {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.mentor-review-toolbar {
+  margin-bottom: 1.25rem;
+}
+
+.mentor-review-title {
+  margin: 0 0 0.35rem 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.mentor-review-sub {
+  margin: 0 0 0.75rem 0;
+  color: #64748b;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  max-width: 42rem;
+}
+
+.mentor-review-refresh {
+  padding: 0.45rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #5b21b6;
+  background: #fff;
+  border: 1px solid #c4b5fd;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.mentor-review-refresh:hover:not(:disabled) {
+  background: #f5f3ff;
+}
+
+.mentor-review-refresh:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.mentor-review-error {
+  color: #b91c1c;
+  font-size: 0.875rem;
+  margin: 0 0 0.75rem 0;
+}
+
+.mentor-review-success {
+  color: #047857;
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem 0;
+}
+
+.mentor-review-empty {
+  padding: 1.5rem;
+}
+
+.mentor-review-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .mentor-review-panels {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mentor-review-list-wrap {
+  background: #fff;
+  border: 1px solid #e9d5ff;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.mentor-review-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+}
+
+.mentor-review-list-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.75rem 0.85rem;
+  border: none;
+  border-bottom: 1px solid #f3e8ff;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition: background 0.12s ease;
+}
+
+.mentor-review-list-item:hover {
+  background: #faf5ff;
+}
+
+.mentor-review-list-item.is-active {
+  background: #ede9fe;
+  box-shadow: inset 3px 0 0 #7c3aed;
+}
+
+.mentor-review-list-title {
+  font-weight: 600;
+  font-size: 0.8125rem;
+  color: #1e1b4b;
+  line-height: 1.35;
+}
+
+.mentor-review-list-meta {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+
+.mentor-review-pill {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.mentor-review-pill--flagged {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.mentor-review-pill--submitted,
+.mentor-review-pill--evaluated {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.mentor-review-detail {
+  background: #fff;
+  border: 1px solid #e9d5ff;
+  border-radius: 12px;
+  padding: 1.1rem 1.25rem 1.25rem;
+}
+
+.mentor-review-detail-head h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.1rem;
+  color: #0f172a;
+}
+
+.mentor-review-detail-student,
+.mentor-review-detail-assign {
+  margin: 0.25rem 0;
+  font-size: 0.875rem;
+  color: #475569;
+}
+
+.mentor-review-detail-email {
+  color: #64748b;
+  font-weight: 400;
+}
+
+.mentor-review-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.mentor-review-link {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #6d28d9;
+  text-decoration: none;
+}
+
+.mentor-review-link:hover {
+  text-decoration: underline;
+}
+
+.mentor-review-student-text {
+  margin-bottom: 1rem;
+  padding: 0.85rem;
+  background: #fafafa;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+}
+
+.mentor-review-student-text h4 {
+  margin: 0 0 0.35rem 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.mentor-review-student-text p {
+  margin: 0 0 0.65rem 0;
+  font-size: 0.875rem;
+  color: #334155;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.mentor-review-student-text div:last-child p {
+  margin-bottom: 0;
+}
+
+.mentor-review-evaluations h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.mentor-review-muted {
+  color: #94a3b8;
+  font-size: 0.875rem;
+}
+
+.mentor-review-ev-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  margin-bottom: 0.5rem;
+  background: #fafafa;
+}
+
+.mentor-review-ev-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.35rem;
+}
+
+.mentor-review-ev-score {
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 0.8125rem;
+}
+
+.mentor-review-ev-decision {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #7c3aed;
+}
+
+.mentor-review-ev-reviewed {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #047857;
+  margin-left: auto;
+}
+
+.mentor-review-ev-summary {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: #334155;
+  line-height: 1.45;
+}
+
+.mentor-review-ev-improve {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.8125rem;
+  color: #475569;
+}
+
+.mentor-review-ev-flags {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  color: #b45309;
+}
+
+.mentor-review-actions-block {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px dashed #e9d5ff;
+}
+
+.mentor-review-textarea {
+  min-height: 120px;
+  margin-bottom: 0.85rem;
+}
+
+.mentor-review-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-bottom: 0.5rem;
+}
+
+.mentor-review-btn {
+  padding: 0.55rem 1.1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+}
+
+.mentor-review-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.mentor-review-btn--approve {
+  background: linear-gradient(165deg, #059669 0%, #047857 100%);
+  color: #fff;
+}
+
+.mentor-review-btn--reject {
+  background: #fff;
+  color: #7c2d12;
+  border: 1px solid #fdba74;
+}
+
+.mentor-review-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
 /* Chatbot (student dashboard) */
 .student-dashboard .chatbot-trigger {
   background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%);
@@ -3023,6 +3362,500 @@
 
   .admin-template-form-section .project-form-span-2 {
     grid-column: span 1;
+  }
+}
+
+/* --- Student projects (simplified list + modal) --- */
+.student-tasks-toolbar--simple {
+  align-items: flex-start;
+}
+
+.student-task-muted {
+  color: #64748b;
+  font-size: 0.9375rem;
+  margin: 0 0 1rem 0;
+}
+
+.student-stats-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.student-stats-strip__item {
+  flex: 1 1 7rem;
+  min-width: 6rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.65rem 0.85rem;
+  text-align: center;
+}
+
+.student-stats-strip__value {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.student-stats-strip__label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 0.2rem;
+}
+
+.student-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.student-task-card-simple {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.student-task-card-simple.is-open {
+  border-color: #99f6e4;
+  box-shadow: 0 0 0 1px #ccfbf1;
+}
+
+.student-task-card-simple__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem 0.5rem;
+}
+
+.student-task-card-simple__toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+}
+
+.student-task-card-simple__toggle:focus-visible {
+  outline: 2px solid #14b8a6;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.student-task-card-simple__chev {
+  color: #94a3b8;
+  font-size: 0.7rem;
+  margin-top: 0.35rem;
+  flex-shrink: 0;
+}
+
+.student-task-card-simple__titles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.student-task-card-simple__name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #0f172a;
+  line-height: 1.35;
+}
+
+.student-task-card-simple__sub {
+  font-size: 0.8125rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.student-task-card-simple__badges {
+  flex-shrink: 0;
+  padding-top: 0.1rem;
+}
+
+.student-task-card-simple .task-badge.task-badge--soft {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.student-task-card-simple .task-badge.beginner {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.student-task-card-simple .task-badge.recommended {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.student-task-card-simple .task-badge.complete {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+.student-task-card-simple .task-badge.danger {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.student-task-card-simple__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  padding: 0 1rem 0.85rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.student-task-card-simple__btn {
+  padding: 0.4rem 0.85rem !important;
+  font-size: 0.8125rem !important;
+}
+
+.student-task-card-simple__body {
+  background: #f1f5f9;
+  border-top: 1px solid #e2e8f0;
+}
+
+.student-feed-section {
+  margin-bottom: 1.5rem;
+}
+
+.student-feed-section__title {
+  margin: 0 0 0.25rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.student-feed-section__hint {
+  margin: 0 0 0.65rem 0;
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.student-task-expand--simple {
+  padding: 1rem 1rem 1.1rem;
+  border-top: none;
+}
+
+.student-task-expand__lead {
+  margin: 0 0 0.85rem 0;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: #334155;
+}
+
+.student-task-callout {
+  background: #f0fdfa;
+  border: 1px solid #ccfbf1;
+  border-radius: 10px;
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 0.85rem;
+}
+
+.student-task-callout__label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #0f766e;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.25rem;
+}
+
+.student-task-callout__text {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: #334155;
+  line-height: 1.45;
+}
+
+.student-task-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.85rem;
+}
+
+.student-task-tag {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.student-task-block {
+  margin-bottom: 0.85rem;
+}
+
+.student-task-block__title {
+  margin: 0 0 0.35rem 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.student-task-block__text {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.student-task-block__list {
+  margin: 0;
+  padding-left: 1.15rem;
+  font-size: 0.875rem;
+  color: #334155;
+  line-height: 1.45;
+}
+
+.student-task-block__list--ordered {
+  padding-left: 1.35rem;
+}
+
+/* “What to hand in” — clear card, readable blocks */
+.student-task-requirements {
+  margin: 0 0 1rem 0;
+  padding: 1rem 1.1rem 1.05rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  border-left: 4px solid #14b8a6;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.06);
+}
+
+.student-task-requirements__title {
+  margin: 0 0 0.65rem 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.student-task-requirements__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.student-task-requirements__item {
+  margin: 0 0 0.5rem 0;
+  padding: 0.65rem 0.8rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: #334155;
+}
+
+.student-task-requirements__item:last-child {
+  margin-bottom: 0;
+}
+
+/* Toolbar — recommend projects */
+.btn-recommend-projects {
+  flex-shrink: 0;
+  padding: 0.5rem 1.15rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(165deg, #14b8a6 0%, #0d9488 100%);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.35);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+}
+
+.btn-recommend-projects:hover:not(:disabled) {
+  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.45);
+  transform: translateY(-1px);
+}
+
+.btn-recommend-projects:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-recommend-projects:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.student-tasks-toolbar .btn-recommend-projects {
+  margin-top: 0.15rem;
+}
+
+.student-task-details {
+  margin-bottom: 0.85rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+  background: #fff;
+}
+
+.student-task-details__summary {
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0f766e;
+  list-style: none;
+}
+
+.student-task-details__summary::-webkit-details-marker {
+  display: none;
+}
+
+.student-task-details__body {
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.student-task-meta-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e2e8f0;
+  font-size: 0.8125rem;
+}
+
+.student-task-meta-row__label {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.15rem;
+}
+
+.student-task-meta-row__value {
+  color: #334155;
+  line-height: 1.35;
+}
+
+.student-task-feedback {
+  margin-top: 0.85rem;
+  padding: 0.75rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.student-task-feedback__title {
+  display: block;
+  font-size: 0.8125rem;
+  margin-bottom: 0.35rem;
+  color: #0f172a;
+}
+
+.student-task-feedback__text {
+  margin: 0 0 0.35rem 0;
+  font-size: 0.875rem;
+  color: #334155;
+  line-height: 1.45;
+}
+
+.student-task-feedback__hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.info-card--plain {
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #fafafa;
+}
+
+.project-modal-card--simple {
+  border-radius: 14px;
+  padding: 1.35rem;
+}
+
+.project-modal-card__title {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.project-modal-card__subtitle {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.project-modal-card__meta {
+  margin: 0.35rem 0 1rem 0;
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.project-form-grid--simple {
+  gap: 1rem;
+}
+
+.project-form-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 0.2rem;
+}
+
+.student-field-hint {
+  display: block;
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-bottom: 0.35rem;
+  line-height: 1.35;
+}
+
+.project-form-note {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+@media (max-width: 520px) {
+  .student-task-meta-row {
+    grid-template-columns: 1fr;
   }
 }
 

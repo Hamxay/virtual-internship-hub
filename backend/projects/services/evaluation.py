@@ -292,8 +292,11 @@ def _apply_parsed_evaluation(submission, data: dict) -> SubmissionEvaluation:
 
     strengths = []
 
-    passed_fr4 = overall_score >= 75.0
-    decision = 'ACCEPTED' if passed_fr4 else 'REVISE_AND_RESUBMIT'
+    rubric = getattr(submission.assignment.project_template, 'rubric', None)
+    passing_threshold = float(rubric.passing_score) if rubric else 75.0
+    passed_fr4 = overall_score >= passing_threshold
+    # FR5: strong AI scores go to mentor; do not auto-complete the assignment.
+    decision = 'NEEDS_MENTOR_REVIEW' if passed_fr4 else 'REVISE_AND_RESUBMIT'
 
     rubric_payload = {
         'fr4_json': data,
@@ -334,8 +337,8 @@ def _apply_parsed_evaluation(submission, data: dict) -> SubmissionEvaluation:
     assignment.latest_evaluation_score = overall_score
     assignment.latest_feedback_summary = feedback_summary
     if passed_fr4:
-        assignment.status = 'COMPLETED'
-        assignment.completed_at = timezone.now()
+        assignment.status = 'PENDING_MENTOR_REVIEW'
+        assignment.completed_at = None
     else:
         assignment.status = 'NEEDS_REVISION'
         assignment.completed_at = None
@@ -585,10 +588,18 @@ def _build_feedback(submission, metrics, similarity_pct, overall_score, decision
             'The submission is complete enough to move the student forward.'
         )
     elif decision == 'NEEDS_MENTOR_REVIEW':
-        summary = (
-            f'Flagged for mentor review with an overall score of {overall_score:.1f}. '
-            'Potential originality or confidence issues need manual verification.'
-        )
+        rubric = getattr(submission.assignment.project_template, 'rubric', None)
+        plagiarism_thr = float(rubric.plagiarism_threshold) if rubric else 75.0
+        if similarity_pct >= plagiarism_thr:
+            summary = (
+                f'Flagged for mentor review with an overall score of {overall_score:.1f}. '
+                'Potential originality or confidence issues need manual verification.'
+            )
+        else:
+            summary = (
+                f'Overall score {overall_score:.1f} meets the passing bar; '
+                'a mentor must confirm before this assignment is marked complete.'
+            )
     else:
         summary = (
             f'Revision required with an overall score of {overall_score:.1f}. '
@@ -628,7 +639,8 @@ def evaluate_submission_heuristic(submission):
     if similarity_pct >= rubric.plagiarism_threshold:
         decision = 'NEEDS_MENTOR_REVIEW'
     elif overall_score >= rubric.passing_score and rubric.allow_auto_accept:
-        decision = 'ACCEPTED'
+        # FR5: same as Gemini path — mentor confirms before completion (no auto ACCEPTED).
+        decision = 'NEEDS_MENTOR_REVIEW'
     else:
         decision = 'REVISE_AND_RESUBMIT'
 
@@ -670,13 +682,15 @@ def evaluate_submission_heuristic(submission):
 
     assignment.latest_evaluation_score = overall_score
     assignment.latest_feedback_summary = summary
-    if decision == 'ACCEPTED':
-        assignment.status = 'COMPLETED'
-        assignment.completed_at = submission.submitted_at
-    elif decision == 'NEEDS_MENTOR_REVIEW':
-        assignment.status = 'SUBMITTED'
+    if decision == 'NEEDS_MENTOR_REVIEW':
+        if similarity_pct >= rubric.plagiarism_threshold:
+            assignment.status = 'SUBMITTED'
+        else:
+            assignment.status = 'PENDING_MENTOR_REVIEW'
+        assignment.completed_at = None
     else:
         assignment.status = 'NEEDS_REVISION'
+        assignment.completed_at = None
     assignment.save(
         update_fields=[
             'latest_evaluation_score',

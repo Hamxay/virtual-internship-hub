@@ -34,7 +34,7 @@ import './Dashboard.css';
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboardIcon },
-  { id: 'tasks', label: 'My Tasks', icon: CheckSquareIcon },
+  { id: 'tasks', label: 'Projects', icon: CheckSquareIcon },
   { id: 'portfolio', label: 'Portfolio', icon: FolderOpenIcon },
 ];
 
@@ -394,7 +394,7 @@ function AssessmentResultView({ result, onBack, onGoToTasks }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem' }}>
           {passed && typeof onGoToTasks === 'function' && (
             <button type="button" className="quiz-btn-primary" onClick={onGoToTasks} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-              <CheckSquareIcon className="w-4 h-4" /> Go to My Tasks
+              <CheckSquareIcon className="w-4 h-4" /> Go to Projects
             </button>
           )}
           <button type="button" className={passed && typeof onGoToTasks === 'function' ? '' : 'quiz-btn-primary'} onClick={onBack} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', ...(passed && typeof onGoToTasks === 'function' ? { padding: '0.65rem 1rem', background: 'transparent', border: '1px solid #e5e7eb', borderRadius: 8, cursor: 'pointer', color: '#475569', fontSize: '0.9375rem', fontWeight: 500 } : {}) }}>
@@ -924,13 +924,13 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
         <div className="tasks-section-card">
           <div className="tasks-section-header">
             <div>
-              <h2 style={{ marginBottom: '0.35rem', color: '#0f172a', fontSize: '1.25rem', fontWeight: 600 }}>Tasks unlocked</h2>
-              <p style={{ color: '#64748b', fontSize: '0.875rem', margin: 0 }}>Your tasks are unlocked. Go to My Tasks to see your recommended tasks.</p>
+              <h2 style={{ marginBottom: '0.35rem', color: '#0f172a', fontSize: '1.25rem', fontWeight: 600 }}>Projects ready</h2>
+              <p style={{ color: '#64748b', fontSize: '0.875rem', margin: 0 }}>Your projects are unlocked. Open <strong>Projects</strong> in the sidebar to see suggestions.</p>
             </div>
             <span className="task-badge beginner">Unlocked</span>
           </div>
           <div style={{ padding: '1rem 1.5rem', textAlign: 'center' }}>
-            <p style={{ color: '#0f766e', fontWeight: 500, margin: 0 }}>Your tasks are unlocked.</p>
+            <p style={{ color: '#0f766e', fontWeight: 500, margin: 0 }}>You can add suggested projects from the Projects tab.</p>
           </div>
         </div>
       ) : (
@@ -938,9 +938,9 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
           <div className="lock-icon-wrap">
             <LockIcon className="w-6 h-6" />
           </div>
-          <h3 style={{ marginBottom: '0.5rem', color: '#0f172a', fontWeight: 600 }}>Tasks Locked</h3>
+          <h3 style={{ marginBottom: '0.5rem', color: '#0f172a', fontWeight: 600 }}>Projects locked</h3>
           <p style={{ color: '#64748b', marginBottom: '1rem', maxWidth: 400, marginLeft: 'auto', marginRight: 'auto', fontSize: '0.9375rem' }}>
-            Complete the skill assessment above to unlock personalized tasks based on your domains and performance.
+            Pass the skill assessment above to unlock projects matched to your domains.
           </p>
           <button type="button" onClick={targetDomains.length >= 2 ? onStartAssessment : undefined} className="btn-outline-primary" disabled={targetDomains.length < 2}>Take Assessment Now</button>
         </div>
@@ -952,7 +952,7 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
           <div className="progress-icon" style={{ background: '#ccfbf1', color: '#0f766e' }}><TargetIcon className="w-6 h-6" /></div>
           <div>
             <div className="progress-value">{tasksCompleted}</div>
-            <div className="progress-label">Tasks Completed</div>
+            <div className="progress-label">Projects done</div>
           </div>
         </div>
         <div className="progress-card">

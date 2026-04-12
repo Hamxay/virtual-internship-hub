@@ -3,9 +3,10 @@ import { useAuth } from '../../context/AuthContext';
 import { mentorApi } from '../../api/mentor.api';
 import { getDomains } from '../../api/domains.api';
 import { buildMentorProfilePayload } from '../../services/mentor.service';
+import MentorReviewQueue from './MentorReviewQueue';
 import './Dashboard.css';
 
-const VIEW = { HOME: 'home', PROFILE: 'profile' };
+const VIEW = { HOME: 'home', REVIEWS: 'reviews', PROFILE: 'profile' };
 
 function MentorDashboard() {
   const { user, logout, refreshUser } = useAuth();
@@ -95,6 +96,13 @@ function MentorDashboard() {
             >
               Students
             </button>
+            <button
+              type="button"
+              className={`mentor-nav-btn ${view === VIEW.REVIEWS ? 'active' : ''}`}
+              onClick={() => setView(VIEW.REVIEWS)}
+            >
+              Review queue
+            </button>
           </div>
           <div className="mentor-nav-right">
             <div className="mentor-user-meta">
@@ -118,6 +126,10 @@ function MentorDashboard() {
       </nav>
 
       <div className="mentor-dashboard-content">
+        {view === VIEW.REVIEWS && (
+          <MentorReviewQueue />
+        )}
+
         {view === VIEW.HOME && (
           <>
             <div className="mentor-welcome-card">

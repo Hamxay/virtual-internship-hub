@@ -28,6 +28,7 @@ ASSIGNMENT_STATUS_CHOICES = [
     ('IN_PROGRESS', 'In Progress'),
     ('SUBMITTED', 'Submitted'),
     ('NEEDS_REVISION', 'Needs Revision'),
+    ('PENDING_MENTOR_REVIEW', 'Pending Mentor Review'),
     ('COMPLETED', 'Completed'),
 ]
 
@@ -154,7 +155,7 @@ class StudentProjectAssignment(models.Model):
         related_name='assignments',
     )
     status = models.CharField(
-        max_length=20,
+        max_length=30,
         choices=ASSIGNMENT_STATUS_CHOICES,
         default='RECOMMENDED',
     )
@@ -272,6 +273,8 @@ class SubmissionEvaluation(models.Model):
     feedback_summary = models.TextField(blank=True)
     evaluation_payload = models.JSONField(default=dict, blank=True)
     reviewed_at = models.DateTimeField(auto_now_add=True)
+    mentor_feedback = models.TextField(blank=True, null=True)
+    is_human_reviewed = models.BooleanField(default=False)
 
     class Meta:
         db_table = 'submission_evaluations'

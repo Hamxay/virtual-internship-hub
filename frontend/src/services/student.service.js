@@ -2,6 +2,8 @@
  * Student payload builders — profile, assessment, project submissions.
  */
 
+import { friendlyApiFieldName } from './studentTasksLabels';
+
 const FILE_SUBMISSION_TYPES = new Set(['DOCUMENT', 'DESIGN', 'PDF', 'WORD', 'SPREADSHEET']);
 const MAX_FILE_MB = 15;
 
@@ -15,7 +17,11 @@ export function formatSubmissionError(err) {
   if (typeof data === 'string') return data;
   if (data.detail) return typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
   return Object.entries(data)
-    .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(' ') : v}`)
+    .map(([k, v]) => {
+      const label = friendlyApiFieldName(k);
+      const msg = Array.isArray(v) ? v.join(' ') : String(v);
+      return `${label}: ${msg}`;
+    })
     .join(' ') || JSON.stringify(data);
 }
 
@@ -49,7 +55,7 @@ export function buildProjectSubmissionPayload(form, template) {
   if (isFileSubmissionType(type)) {
     const file = form.uploaded_file;
     if (!file || !(file instanceof File)) {
-      throw new Error('Choose a file to upload for this project type.');
+      throw new Error('Please choose a file to upload.');
     }
     if (file.size > MAX_FILE_MB * 1024 * 1024) {
       throw new Error(`File must be under ${MAX_FILE_MB} MB.`);
