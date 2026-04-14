@@ -8,6 +8,7 @@ import { adminApi } from '../../api/admin.api';
 import { useDomains, invalidateDomainsCache } from '../../hooks/useDomains';
 import { buildDomainPayload, buildQuestionPayload } from '../../services/admin.service';
 import AdminProjectsSection from './AdminProjectsSection';
+import AdminReportsCommandCenter from '../../pages/admin/AdminDashboard';
 import {
   GraduationCapIcon,
   LayoutDashboardIcon,
@@ -60,7 +61,7 @@ function AdminDashboard() {
       case 'projects':
         return <AdminProjectsSection />;
       case 'reports':
-        return <AdminReportsPlaceholder />;
+        return <AdminReportsCommandCenter />;
       default:
         return <AdminDashboardHome />;
     }
@@ -314,7 +315,20 @@ function AdminUsersSection() {
                     <tr key={row.id}>
                       <td>{name}</td>
                       <td>{row.email}</td>
-                      <td>{row.username}</td>
+                      <td>
+                        {tab === 'students' && row.username ? (
+                          <a
+                            href={`/portfolio/${encodeURIComponent(row.username)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="admin-student-portfolio-link"
+                          >
+                            {row.username}
+                          </a>
+                        ) : (
+                          row.username
+                        )}
+                      </td>
                       <td>{row.is_active ? 'Active' : 'Inactive'}</td>
                     </tr>
                   );
@@ -859,21 +873,6 @@ function AdminAssessmentsSection() {
           )}
           {!selectedDomainId && <p style={{ color: '#6b7280' }}>Select a domain to add questions.</p>}
         </div>
-      </div>
-    </div>
-  );
-}
-
-function AdminReportsPlaceholder() {
-  return (
-    <div className="dashboard-section">
-      <h1>Reports & Analytics</h1>
-      <p className="section-desc">Progress tracking and skill improvement insights (FR9).</p>
-      <div className="info-card" style={{ marginTop: '1rem' }}>
-        <p>Charts and tables for signups, completions, and skill improvement over time. Filter by date range and role.</p>
-        <button type="button" className="btn-primary mt-4" style={{ padding: '0.5rem 1rem', borderRadius: 8, background: '#111827', color: 'white', border: 'none', cursor: 'pointer' }}>
-          Export Report (API required)
-        </button>
       </div>
     </div>
   );

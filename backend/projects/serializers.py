@@ -144,6 +144,10 @@ class ProjectTemplateSerializer(serializers.ModelSerializer):
 
 
 class SubmissionEvaluationSerializer(serializers.ModelSerializer):
+    """Includes ``extracted_tags`` from FR4 payload (stored on ``rubric_scores`` / submission metadata)."""
+
+    extracted_tags = serializers.SerializerMethodField()
+
     class Meta:
         model = SubmissionEvaluation
         fields = (
@@ -163,7 +167,22 @@ class SubmissionEvaluationSerializer(serializers.ModelSerializer):
             'reviewed_at',
             'mentor_feedback',
             'is_human_reviewed',
+            'extracted_tags',
         )
+
+    def get_extracted_tags(self, obj):
+        rs = obj.rubric_scores if isinstance(obj.rubric_scores, dict) else {}
+        raw = rs.get('extracted_tags')
+        if isinstance(raw, list):
+            out = [str(t).strip() for t in raw if str(t).strip()]
+            if out:
+                return out
+        if obj.submission_id:
+            meta = getattr(obj.submission, 'metadata', None) or {}
+            alt = meta.get('fr4_extracted_tags')
+            if isinstance(alt, list):
+                return [str(t).strip() for t in alt if str(t).strip()]
+        return []
 
 
 class ProjectSubmissionSerializer(serializers.ModelSerializer):

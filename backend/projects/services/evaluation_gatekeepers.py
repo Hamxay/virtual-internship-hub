@@ -48,6 +48,9 @@ def syntax_gatekeeper_result(submission, extract: SubmissionExtractResult) -> Op
     Otherwise return None (pass or skip).
     """
     body = combined_extract_text(extract)
+    # Multi-file repository bundles are not valid single-module Python; skip ``ast``.
+    if '===== FILE:' in body:
+        return None
     if not _should_run_python_syntax_check(submission, body):
         return None
     if not body.strip():

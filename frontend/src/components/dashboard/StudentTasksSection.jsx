@@ -22,6 +22,32 @@ const EMPTY_SUBMISSION_FORM = {
   submitted_files: '',
 };
 
+/** Assignment waiting on Celery + Gemini (submission row still SUBMITTED). */
+function isAiEvaluationPending(assignment) {
+  return (
+    assignment.status === 'SUBMITTED'
+    && assignment.latest_submission?.status === 'SUBMITTED'
+  );
+}
+
+function getExtractedTags(submission, evaluation) {
+  const fromRubric = evaluation?.rubric_scores?.extracted_tags;
+  const fromMeta = submission?.metadata?.fr4_extracted_tags;
+  if (Array.isArray(fromRubric) && fromRubric.length) return fromRubric;
+  if (Array.isArray(fromMeta) && fromMeta.length) return fromMeta;
+  return [];
+}
+
+function formatImprovementsBlock(evaluation) {
+  if (!evaluation?.improvements) return '';
+  const { improvements } = evaluation;
+  if (typeof improvements === 'string') return improvements.trim();
+  if (Array.isArray(improvements)) {
+    return improvements.map((s) => String(s).trim()).filter(Boolean).join('\n\n');
+  }
+  return '';
+}
+
 function statusBadgeClass(status) {
   if (status === 'COMPLETED') return 'complete';
   if (status === 'NEEDS_REVISION') return 'danger';
@@ -129,16 +155,52 @@ function TaskExpandedDetails({ assignment }) {
         </div>
       </div>
 
+      {isAiEvaluationPending(assignment) && (
+        <div className="student-task-ai-evaluating" role="status" aria-live="polite">
+          <span className="student-task-ai-evaluating__dot" aria-hidden />
+          <span>🤖 AI Evaluator is analyzing your submission…</span>
+        </div>
+      )}
+
       {assignment.latest_submission?.evaluations?.[0] && (
         <div className="student-task-feedback">
-          <strong className="student-task-feedback__title">Feedback</strong>
-          <p className="student-task-feedback__text">{assignment.latest_submission.evaluations[0].feedback_summary}</p>
-          {Array.isArray(assignment.latest_submission.evaluations[0].improvements)
-            && assignment.latest_submission.evaluations[0].improvements.length > 0 && (
-            <p className="student-task-feedback__hint">
-              Next: {assignment.latest_submission.evaluations[0].improvements.slice(0, 3).join(' · ')}
-            </p>
-          )}
+          <strong className="student-task-feedback__title">AI feedback</strong>
+          {(() => {
+            const sub = assignment.latest_submission;
+            const ev = sub.evaluations[0];
+            const scoreNum = ev.overall_score != null ? Math.round(Number(ev.overall_score)) : null;
+            const tags = getExtractedTags(sub, ev);
+            const impBlock = formatImprovementsBlock(ev);
+            return (
+              <>
+                {scoreNum != null && !Number.isNaN(scoreNum) && (
+                  <p className="student-task-ai-score">
+                    {scoreNum}
+                    <span> / 100</span>
+                  </p>
+                )}
+                {ev.feedback_summary ? (
+                  <p className="student-task-feedback__text">{ev.feedback_summary}</p>
+                ) : null}
+                {impBlock ? (
+                  <div>
+                    <span className="student-task-feedback__title" style={{ display: 'block', marginTop: '0.5rem' }}>Improvements</span>
+                    <p className="student-task-ai-improvements">{impBlock}</p>
+                  </div>
+                ) : null}
+                {tags.length > 0 && (
+                  <div>
+                    <span className="student-task-feedback__title" style={{ display: 'block', marginTop: '0.35rem' }}>Topics detected</span>
+                    <div className="student-task-ai-tags">
+                      {tags.map((tag, idx) => (
+                        <span key={`${tag}-${idx}`} className="student-task-ai-tag">{tag}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
     </div>
@@ -188,8 +250,19 @@ function TaskAssignmentList({
                   Add to my list
                 </button>
               )}
+              {assignment.status === 'SUBMITTED' && (
+                <button type="button" className="btn-outline-primary student-task-card-simple__btn" disabled>
+                  🤖 AI Evaluator is analyzing…
+                </button>
+              )}
               {['IN_PROGRESS', 'NEEDS_REVISION'].includes(assignment.status) && (
-                <button type="button" className="btn-primary student-task-card-simple__btn" onClick={() => onOpenSubmit(assignment)}>
+                <button
+                  type="button"
+                  className="btn-primary student-task-card-simple__btn"
+                  onClick={() => onOpenSubmit(assignment)}
+                  disabled={isAiEvaluationPending(assignment)}
+                  title={isAiEvaluationPending(assignment) ? 'Wait for AI grading to finish before resubmitting.' : undefined}
+                >
                   {assignment.status === 'NEEDS_REVISION' ? 'Hand in again' : 'Hand in work'}
                 </button>
               )}
@@ -256,6 +329,58 @@ export default function StudentTasksSection({ assessmentPassed, onStartAssessmen
       setLoading(false);
     }
   }, [onStatsChange]);
+
+  const assignmentsRef = useRef([]);
+  useEffect(() => {
+    assignmentsRef.current = assignments;
+  }, [assignments]);
+
+  const pendingAiEvaluation = useMemo(
+    () => assignments.some(
+      (a) => a.status === 'SUBMITTED' && a.latest_submission?.status === 'SUBMITTED',
+    ),
+    [assignments],
+  );
+
+  useEffect(() => {
+    if (!pendingAiEvaluation) return undefined;
+
+    let stopped = false;
+
+    const pollOnce = async () => {
+      if (stopped) return;
+      const rows = assignmentsRef.current.filter(
+        (a) => a.status === 'SUBMITTED' && a.latest_submission?.status === 'SUBMITTED',
+      );
+      if (rows.length === 0) return;
+
+      for (let i = 0; i < rows.length; i += 1) {
+        const sid = rows[i].latest_submission?.id;
+        if (!sid) continue;
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          const { data } = await studentApi.getSubmissionFeedback(sid);
+          if (stopped) return;
+          if (data.status !== 'SUBMITTED') {
+            await loadAssignments();
+            return;
+          }
+        } catch (err) {
+          if (!stopped) {
+            // eslint-disable-next-line no-console
+            console.warn('Submission feedback poll failed:', err);
+          }
+        }
+      }
+    };
+
+    pollOnce();
+    const timer = setInterval(pollOnce, 5000);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [pendingAiEvaluation, loadAssignments]);
 
   const refreshRecommendations = useCallback(async () => {
     setRefreshingRecommendations(true);

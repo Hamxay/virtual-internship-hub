@@ -23,21 +23,18 @@ from projects.services.evaluation_gatekeepers import (
     pre_ai_plagiarism_max_similarity_percent,
     syntax_gatekeeper_result,
 )
-from projects.services.extractor import extract_submission_for_evaluation
+from projects.services.extractor import SubmissionExtractResult
 from projects.services.recommendation import (
     apply_fr4_recommended_difficulty_if_higher,
     update_student_progress_snapshot,
 )
+from projects.utils.code_flattener import UniversalRepositoryFlattener
+from projects.utils.document_extractor import UniversalDocumentExtractor
+from projects.utils.prompt_builder import build_evaluation_prompt
 
 logger = logging.getLogger(__name__)
 
 GEMINI_MODEL_NAME = 'gemini-1.5-flash'
-
-FR4_SYSTEM_PROMPT = """You are a Senior Technical Mentor evaluating a student project submission.
-Return ONLY valid JSON (no markdown fences). Be fair, specific, and constructive.
-All score fields MUST be integers from 0 to 100 inclusive unless design_quality_score is null.
-Use null for design_quality_score only when there is no meaningful design aspect to assess.
-"""
 
 
 def _strip_json_fences(raw_text: str) -> str:
@@ -54,55 +51,78 @@ def _parse_gemini_json(raw_text: str) -> dict:
     return json.loads(cleaned)
 
 
-def _build_fr4_user_prompt(submission, extract_text_body: str) -> str:
-    assignment = submission.assignment
-    template = assignment.project_template
-    instruction = getattr(template, 'instruction', None)
-    rubric = getattr(template, 'rubric', None)
+def _build_fr4_student_bundle(submission: ProjectSubmission) -> tuple[str, list, SubmissionExtractResult]:
+    """
+    Route: GitHub repository (ZIP flatten) and/or uploaded document path.
+    Returns ``(student_text_for_prompt, gemini_upload_handles, gatekeeper_extract)``.
+    """
+    handles: list = []
+    sections: list[str] = []
 
-    lines = [
-        f'## Project title\n{template.title}',
-        f'## Short description\n{template.short_description or ""}',
-        f'## Business problem\n{template.business_problem or ""}',
-        f'## Template complexity\n{template.complexity}',
-        f'## Submission type\n{template.submission_type}',
-    ]
-    if instruction:
-        lines.extend(
-            [
-                f'## Instruction overview\n{instruction.overview or ""}',
-                f'## Steps\n{json.dumps(instruction.steps or [], indent=2)}',
-                f'## Deliverables\n{json.dumps(instruction.deliverables or [], indent=2)}',
-                f'## Submission requirements\n{json.dumps(instruction.submission_requirements or [], indent=2)}',
-                f'## Evaluation notes (for graders)\n{instruction.evaluation_notes or ""}',
-            ]
-        )
-    if rubric:
-        lines.extend(
-            [
-                f'## Rubric passing score\n{rubric.passing_score}',
-                f'## Rubric criteria\n{json.dumps(rubric.criteria or [], indent=2)}',
-            ]
-        )
-    lines.append('## Extracted student content (text and described artifacts)\n' + (extract_text_body or '(no text extracted)'))
-    lines.append(
-        '\n## Required JSON shape (exact keys; application/json)\n'
-        '{\n'
-        '  "overall_score": <int 0-100>,\n'
-        '  "correctness_score": <int 0-100>,\n'
-        '  "originality_score": <int 0-100>,\n'
-        '  "grammar_score": <int 0-100>,\n'
-        '  "design_quality_score": <int 0-100> | null,\n'
-        '  "improvements": ["..."],\n'
-        '  "extracted_tags": ["short topic or skill tags"],\n'
-        '  "recommended_next_difficulty": "BEGINNER" | "INTERMEDIATE" | "ADVANCED"\n'
-        '}\n'
-        'Omit no keys except use null only for design_quality_score when not applicable.'
-    )
-    return '\n'.join(lines)
+    notes = (submission.notes or '').strip()
+    stext = (submission.submission_text or '').strip()
+    if notes:
+        sections.append(f'## Student notes\n{notes}')
+    if stext:
+        sections.append(f'## Student submission text\n{stext}')
+
+    repo = (submission.repository_url or '').strip()
+    try:
+        if repo and 'github.com' in repo.lower():
+            flattened = UniversalRepositoryFlattener().flatten(repo)
+            if flattened:
+                sections.append(f'## Repository source bundle\n{flattened}')
+    except Exception as exc:
+        logger.exception('Repository flatten failed: %s', exc)
+        sections.append(f'## Repository source bundle\n(Repository processing failed: {exc})')
+
+    try:
+        uploaded = submission.uploaded_file
+        if uploaded and getattr(uploaded, 'name', None):
+            try:
+                abs_path = uploaded.path
+            except Exception:
+                abs_path = None
+            if abs_path:
+                outcome = UniversalDocumentExtractor.process(abs_path)
+                if outcome.text_markdown:
+                    sections.append(outcome.text_markdown)
+                handles.extend(outcome.gemini_file_handles)
+    except Exception as exc:
+        logger.exception('Document extraction failed: %s', exc)
+        sections.append(f'## Uploaded document\n(Document processing failed: {exc})')
+
+    rendered = '\n\n'.join(s for s in sections if s).strip() or '(No extractable student content.)'
+
+    gate = SubmissionExtractResult()
+    gate.text_parts = [rendered] if rendered else []
+    return rendered, handles, gate
 
 
-def _run_gemini_evaluation(submission, extract) -> dict:
+def _delete_gemini_file_handles(handles: list) -> None:
+    if not handles:
+        return
+    api_key = getattr(settings, 'GEMINI_API_KEY', '') or ''
+    if not str(api_key).strip():
+        return
+    try:
+        import google.generativeai as genai
+    except ImportError:
+        return
+    try:
+        genai.configure(api_key=api_key)
+        for handle in handles:
+            try:
+                name = getattr(handle, 'name', None) or getattr(handle, 'uri', None)
+                if name:
+                    genai.delete_file(name)
+            except Exception as exc:
+                logger.warning('Could not delete Gemini uploaded file: %s', exc)
+    except Exception as exc:
+        logger.warning('Gemini cleanup configure/delete failed: %s', exc)
+
+
+def _run_gemini_evaluation(submission: ProjectSubmission, student_text: str, upload_handles: list) -> dict:
     api_key = getattr(settings, 'GEMINI_API_KEY', '') or ''
     if not str(api_key).strip():
         raise RuntimeError('GEMINI_API_KEY is not configured.')
@@ -113,21 +133,18 @@ def _run_gemini_evaluation(submission, extract) -> dict:
         raise RuntimeError('google-generativeai is not installed.') from exc
 
     genai.configure(api_key=api_key)
+    template = submission.assignment.project_template
+    system_instruction, user_prompt = build_evaluation_prompt(template, student_text)
+
     model = genai.GenerativeModel(
         GEMINI_MODEL_NAME,
-        system_instruction=FR4_SYSTEM_PROMPT,
+        system_instruction=system_instruction,
         generation_config={'response_mime_type': 'application/json'},
     )
 
-    combined_text = '\n\n'.join(extract.text_parts)
-    user_prompt = _build_fr4_user_prompt(submission, combined_text)
-
-    uploaded_handles = []
+    handles = list(upload_handles or [])
     try:
-        for local_path in extract.gemini_local_paths:
-            uploaded_handles.append(genai.upload_file(local_path))
-
-        content_parts = uploaded_handles + [user_prompt]
+        content_parts = handles + [user_prompt]
         response = model.generate_content(content_parts)
         try:
             raw_text = response.text
@@ -137,11 +154,7 @@ def _run_gemini_evaluation(submission, extract) -> dict:
             raise RuntimeError('Empty response from Gemini.')
         return _parse_gemini_json(raw_text)
     finally:
-        for handle in uploaded_handles:
-            try:
-                genai.delete_file(handle.name)
-            except Exception as cleanup_error:
-                logger.warning('Could not delete uploaded Gemini file %s: %s', handle.name, cleanup_error)
+        _delete_gemini_file_handles(handles)
 
 
 def _coerce_fr4_int_score(value, default=0) -> int:
@@ -256,21 +269,34 @@ def _apply_parsed_evaluation(submission, data: dict) -> SubmissionEvaluation:
     assignment = submission.assignment
 
     overall_score = float(_coerce_fr4_int_score(data.get('overall_score'), 0))
-    correctness_score = float(_coerce_fr4_int_score(data.get('correctness_score'), int(overall_score)))
-    originality_score = float(_coerce_fr4_int_score(data.get('originality_score'), int(overall_score)))
-    grammar_score = float(_coerce_fr4_int_score(data.get('grammar_score'), int(overall_score)))
+    o_int = int(overall_score)
+    if 'correctness_score' in data:
+        correctness_score = float(_coerce_fr4_int_score(data.get('correctness_score'), o_int))
+    else:
+        correctness_score = float(o_int)
+    if 'originality_score' in data:
+        originality_score = float(_coerce_fr4_int_score(data.get('originality_score'), o_int))
+    else:
+        originality_score = float(o_int)
+    if 'grammar_score' in data:
+        grammar_score = float(_coerce_fr4_int_score(data.get('grammar_score'), o_int))
+    else:
+        grammar_score = float(o_int)
 
-    design_raw = data.get('design_quality_score')
+    design_raw = data.get('design_quality_score', None) if 'design_quality_score' in data else None
     design_null = design_raw is None
     if design_null:
         design_quality_score = 0.0
     else:
-        design_quality_score = float(_coerce_fr4_int_score(design_raw, int(overall_score)))
+        design_quality_score = float(_coerce_fr4_int_score(design_raw, o_int))
 
-    improvements = data.get('improvements') or []
-    if not isinstance(improvements, list):
-        improvements = [str(improvements)]
-    improvements = [str(s).strip() for s in improvements if str(s).strip()]
+    raw_improvements = data.get('improvements')
+    if isinstance(raw_improvements, str):
+        improvements = [raw_improvements.strip()] if raw_improvements.strip() else []
+    elif isinstance(raw_improvements, list):
+        improvements = [str(s).strip() for s in raw_improvements if str(s).strip()]
+    else:
+        improvements = []
 
     extracted_tags = data.get('extracted_tags') or []
     if not isinstance(extracted_tags, list):
@@ -717,7 +743,18 @@ def evaluate_submission_logic(submission_id: int) -> SubmissionEvaluation:
         'assignment__project_template__rubric',
     ).get(pk=submission_id)
 
-    extract = extract_submission_for_evaluation(submission)
+    try:
+        student_text, upload_handles, extract = _build_fr4_student_bundle(submission)
+    except Exception as exc:
+        logger.exception('FR4 student bundle failed for submission %s: %s', submission_id, exc)
+        student_text = (
+            (submission.submission_text or '').strip()
+            or (submission.notes or '').strip()
+            or '(No extractable student content.)'
+        )
+        upload_handles = []
+        extract = SubmissionExtractResult()
+        extract.text_parts = [student_text]
 
     syntax_msg = syntax_gatekeeper_result(submission, extract)
     if syntax_msg:
@@ -737,7 +774,7 @@ def evaluate_submission_logic(submission_id: int) -> SubmissionEvaluation:
             return evaluate_submission_heuristic(submission)
 
     try:
-        parsed = _run_gemini_evaluation(submission, extract)
+        parsed = _run_gemini_evaluation(submission, student_text, upload_handles)
     except Exception as exc:
         logger.exception('Gemini evaluation failed for submission %s: %s', submission_id, exc)
         with transaction.atomic():

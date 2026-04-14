@@ -7,6 +7,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AuthPage, ProtectedRoute } from './components/auth';
 import HomePage from './components/home/HomePage';
+import PublicPortfolioPage from './components/portfolio/PublicPortfolioPage';
 import { ROLE, VIEW } from './utilities/constants';
 
 const StudentDashboard = lazy(() => import('./components/dashboard/StudentDashboard'));
@@ -36,6 +37,7 @@ function AppRoutes() {
         <Route path="/admin/login" element={isAuthenticated ? <Navigate to="/dashboard" /> : <AuthPage role={ROLE.ADMINISTRATOR} initialView={VIEW.LOGIN} />} />
         <Route path="/login" element={<Navigate to="/student/login" replace />} />
         <Route path="/register" element={<Navigate to="/student/signup" replace />} />
+        <Route path="/portfolio/:username" element={<PublicPortfolioPage />} />
         <Route
           path="/student/dashboard"
           element={

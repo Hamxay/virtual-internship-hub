@@ -1,0 +1,330 @@
+/* FR7 Career Coach — scoped widget (ccw-) */
+
+.ccw-fab {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 1040;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 9999px;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: #fff;
+  box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.45), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ccw-fab:hover {
+  transform: scale(1.05);
+  box-shadow: 0 14px 28px -6px rgba(37, 99, 235, 0.5), 0 10px 12px -6px rgba(0, 0, 0, 0.12);
+}
+
+.ccw-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1048;
+  background: rgba(15, 23, 42, 0.35);
+  animation: ccw-fade-in 0.2s ease;
+}
+
+.ccw-panel {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 1050;
+  width: min(100vw - 2rem, 22rem);
+  height: min(100dvh - 6rem, 32rem);
+  max-height: calc(100vh - 5rem);
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: ccw-slide-up 0.22s ease;
+}
+
+@keyframes ccw-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ccw-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ccw-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.75rem 0.85rem;
+  background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
+  color: #fff;
+}
+
+.ccw-header h2 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.ccw-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.ccw-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.ccw-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.ccw-icon-btn[aria-pressed='true'] {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.ccw-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ccw-history {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+  background: #f8fafc;
+}
+
+.ccw-history-item {
+  width: 100%;
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  margin-bottom: 0.35rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: #1e293b;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.ccw-history-item:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.ccw-history-meta {
+  font-size: 0.7rem;
+  color: #64748b;
+  margin-top: 0.2rem;
+}
+
+.ccw-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.65rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: #f1f5f9;
+}
+
+.ccw-empty {
+  text-align: center;
+  padding: 1.5rem 0.75rem;
+  font-size: 0.8125rem;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.ccw-bubble {
+  max-width: 92%;
+  padding: 0.55rem 0.7rem;
+  border-radius: 12px;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.ccw-bubble-user {
+  align-self: flex-end;
+  background: #2563eb;
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.ccw-bubble-model {
+  align-self: flex-start;
+  background: #fff;
+  color: #0f172a;
+  border: 1px solid #e2e8f0;
+  border-bottom-left-radius: 4px;
+}
+
+.ccw-bubble-model .ccw-md {
+  font-size: 0.8125rem;
+}
+
+.ccw-bubble-model .ccw-md p {
+  margin: 0 0 0.5rem;
+}
+
+.ccw-bubble-model .ccw-md p:last-child {
+  margin-bottom: 0;
+}
+
+.ccw-bubble-model .ccw-md ul,
+.ccw-bubble-model .ccw-md ol {
+  margin: 0.35rem 0 0.35rem 1.1rem;
+  padding: 0;
+}
+
+.ccw-bubble-model .ccw-md li {
+  margin: 0.2rem 0;
+}
+
+.ccw-bubble-model .ccw-md strong {
+  font-weight: 600;
+}
+
+.ccw-bubble-model .ccw-md code {
+  font-size: 0.75em;
+  background: #f1f5f9;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+.ccw-bubble-time {
+  font-size: 0.65rem;
+  opacity: 0.75;
+  margin-top: 0.25rem;
+}
+
+.ccw-typing {
+  align-self: flex-start;
+  padding: 0.5rem 0.75rem;
+  background: #e2e8f0;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  color: #475569;
+  letter-spacing: 0.12em;
+}
+
+.ccw-chips {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.45rem 0.65rem;
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+}
+
+.ccw-chip {
+  font-size: 0.7rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.ccw-chip:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.ccw-error {
+  flex-shrink: 0;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.75rem;
+  color: #b91c1c;
+  background: #fef2f2;
+  border-top: 1px solid #fecaca;
+}
+
+.ccw-input-row {
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.5rem 0.65rem;
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+}
+
+.ccw-input-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 0.8125rem;
+  outline: none;
+}
+
+.ccw-input-row input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.ccw-input-row button[type='submit'] {
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 10px;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.ccw-input-row button[type='submit']:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.ccw-input-row button[type='submit']:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

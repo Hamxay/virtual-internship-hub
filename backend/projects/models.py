@@ -149,6 +149,15 @@ class StudentProjectAssignment(models.Model):
         on_delete=models.CASCADE,
         related_name='project_assignments',
     )
+    mentor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='mentored_assignments',
+        limit_choices_to={'role': 'MENTOR'},
+        help_text='Mentor associated with this assignment (set when a mentor reviews).',
+    )
     project_template = models.ForeignKey(
         ProjectTemplate,
         on_delete=models.CASCADE,

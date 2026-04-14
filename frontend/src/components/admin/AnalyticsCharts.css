@@ -1,0 +1,142 @@
+.analytics-charts {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.analytics-charts-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem;
+}
+
+.analytics-kpi-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.analytics-kpi-card h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+}
+
+.analytics-kpi-value {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.analytics-kpi-growth--positive {
+  color: #15803d;
+}
+
+.analytics-charts-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+
+@media (min-width: 1024px) {
+  .analytics-charts-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.analytics-chart-panel {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1rem 1.25rem 1.25rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.analytics-chart-panel-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.analytics-chart-panel-desc {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+  color: #6b7280;
+}
+
+.analytics-chart-wrap {
+  width: 100%;
+  min-height: 320px;
+}
+
+.analytics-chart-empty {
+  margin: 0;
+  padding: 3rem 1rem;
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.9375rem;
+}
+
+.analytics-charts-tooltip {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.analytics-charts-tooltip-title {
+  margin: 0 0 0.25rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #111827;
+}
+
+.analytics-charts-tooltip-meta {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: #4b5563;
+}
+
+.analytics-cluster-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  font-size: 0.8125rem;
+  color: #4b5563;
+}
+
+.analytics-cluster-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.analytics-cluster-legend .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.analytics-cluster-legend .dot--0 {
+  background: #ef4444;
+}
+
+.analytics-cluster-legend .dot--1 {
+  background: #eab308;
+}
+
+.analytics-cluster-legend .dot--2 {
+  background: #22c55e;
+}

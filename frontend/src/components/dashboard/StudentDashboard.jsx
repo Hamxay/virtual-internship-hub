@@ -8,20 +8,19 @@ import { getDomains } from '../../api/domains.api';
 import { buildProfileUpdatePayload, buildAssessmentSubmitPayload } from '../../services/student.service';
 import { getErrorMessage } from '../../utilities/authUtils';
 import StudentTasksSection from './StudentTasksSection';
+import CareerCoachWidget from '../chat/CareerCoachWidget';
 import {
   GraduationCapIcon,
   LayoutDashboardIcon,
   CheckSquareIcon,
   FolderOpenIcon,
   BellIcon,
-  MessageCircleIcon,
   LogOutIcon,
   AlertCircleIcon,
   CheckCircleIcon,
   LockIcon,
   TargetIcon,
   AwardIcon,
-  SendIcon,
   FileTextIcon,
   UserIcon,
   ClockIcon,
@@ -37,20 +36,6 @@ const NAV_ITEMS = [
   { id: 'tasks', label: 'Projects', icon: CheckSquareIcon },
   { id: 'portfolio', label: 'Portfolio', icon: FolderOpenIcon },
 ];
-
-const CHATBOT_SUGGESTIONS = [
-  'How do I start freelancing?',
-  'What skills are in demand?',
-  'Tips for building a portfolio',
-];
-
-function getBotReply(input) {
-  const lower = (input || '').toLowerCase();
-  if (lower.includes('freelanc') || lower.includes('start')) return 'To start freelancing: 1) Build a strong portfolio. 2) Create profiles on Upwork, Fiverr. 3) Start with smaller projects. 4) Network and ask for referrals.';
-  if (lower.includes('skill') || lower.includes('demand')) return 'High-demand skills: Web Dev (React, Next.js), Mobile (React Native, Flutter), UI/UX, Data Science, Cloud (AWS, Azure), Cybersecurity.';
-  if (lower.includes('portfolio')) return 'Portfolio tips: Quality over quantity, include case studies, live demos or GitHub links, keep it updated.';
-  return 'I can help with freelancing tips, career advice, and skill development. Ask something specific!';
-}
 
 /* Figma-style: Start screen before quiz – Back allowed here; no back once quiz starts */
 function AssessmentStartScreen({ onStart, onBack, attemptCount, maxAttempts }) {
@@ -414,7 +399,6 @@ function StudentDashboard() {
   const [attemptCountToday, setAttemptCountToday] = useState(0); // from attempts list, for "X of 2 used today"
   const [lastAttempt, setLastAttempt] = useState(null);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showChatbot, setShowChatbot] = useState(false);
   const [assessmentView, setAssessmentView] = useState('idle'); // 'idle' | 'intro' | 'test' | 'result'
   const [composedData, setComposedData] = useState(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -746,6 +730,16 @@ function StudentDashboard() {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {user?.username ? (
+              <a
+                href={`/portfolio/${encodeURIComponent(user.username)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="student-public-portfolio-link"
+              >
+                View My Public Portfolio
+              </a>
+            ) : null}
             <button type="button" className="nav-icon-btn relative" onClick={() => setShowNotifications(!showNotifications)} aria-label="Notifications">
               <BellIcon className="w-5 h-5" />
               <span className="absolute top-0 right-0 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">0</span>
@@ -779,15 +773,7 @@ function StudentDashboard() {
         {renderContent()}
       </div>
 
-      {/* Career Chatbot trigger – hidden during assessment */}
-      {!['intro', 'test', 'result'].includes(assessmentView) && (
-        <button type="button" className="chatbot-trigger" onClick={() => setShowChatbot(true)} title="Career Guidance">
-          <MessageCircleIcon className="w-6 h-6" />
-        </button>
-      )}
-
-      {/* Career Chatbot panel */}
-      {showChatbot && <CareerChatbotPanel onClose={() => setShowChatbot(false)} />}
+      <CareerCoachWidget hidden={['intro', 'test', 'result'].includes(assessmentView)} hasCompletedProjects={taskStats.completed > 0} />
     </div>
   );
 }
@@ -997,61 +983,6 @@ function StudentPortfolioPlaceholder() {
         <p>Portfolio items from completed projects will appear here. Connect API when ready.</p>
       </div>
     </div>
-  );
-}
-
-function CareerChatbotPanel({ onClose }) {
-  const [messages, setMessages] = useState([
-    { id: 1, type: 'bot', text: "Hi! I'm your career guidance assistant. I can help with freelancing tips, career advice, and skill development. What would you like to know?", time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
-  ]);
-  const [inputValue, setInputValue] = useState('');
-
-  const send = (text) => {
-    if (!text.trim()) return;
-    const userMsg = { id: messages.length + 1, type: 'user', text: text.trim(), time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
-    setMessages((prev) => [...prev, userMsg]);
-    setInputValue('');
-    setTimeout(() => {
-      const botText = getBotReply(text);
-      setMessages((prev) => [...prev, { id: prev.length + 2, type: 'bot', text: botText, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
-    }, 600);
-  };
-
-  return (
-    <>
-      <div className="chatbot-overlay" onClick={onClose} aria-hidden />
-      <div className="chatbot-panel">
-        <div className="chatbot-header">
-          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Career Guidance & Freelancing Tips</h3>
-          <button type="button" onClick={onClose} style={{ padding: '0.25rem', background: 'transparent', border: 'none', cursor: 'pointer' }} aria-label="Close"><XIcon className="w-5 h-5" /></button>
-        </div>
-        <div className="chat-messages">
-          {messages.map((m) => (
-            <div key={m.id} className={`chat-message ${m.type}`}>
-              <div>{m.text}</div>
-              <div style={{ fontSize: '0.7rem', opacity: 0.8, marginTop: '0.25rem' }}>{m.time}</div>
-            </div>
-          ))}
-        </div>
-        <div style={{ padding: '0.5rem', borderTop: '1px solid #e5e7eb' }}>
-          {CHATBOT_SUGGESTIONS.map((q, i) => (
-            <button key={i} type="button" onClick={() => send(q)} style={{ display: 'block', width: '100%', marginBottom: '0.35rem', padding: '0.4rem 0.75rem', background: '#f3f4f6', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: '0.8rem', textAlign: 'left' }}>{q}</button>
-          ))}
-        </div>
-        <div className="chat-input-wrap">
-          <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send(inputValue)} placeholder="Ask about careers or freelancing..." />
-          <button type="button" onClick={() => send(inputValue)}><SendIcon className="w-4 h-4" /></button>
-        </div>
-      </div>
-    </>
-  );
-}
-
-function XIcon({ className = 'w-5 h-5' }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-    </svg>
   );
 }
 
