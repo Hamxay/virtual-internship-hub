@@ -4,6 +4,7 @@ import { mentorApi } from '../../api/mentor.api';
 import { getDomains } from '../../api/domains.api';
 import { buildMentorProfilePayload } from '../../services/mentor.service';
 import MentorReviewQueue from './MentorReviewQueue';
+import Navbar from '../layout/Navbar';
 import './Dashboard.css';
 
 const VIEW = { HOME: 'home', REVIEWS: 'reviews', PROFILE: 'profile' };
@@ -104,7 +105,8 @@ function MentorDashboard() {
               Review queue
             </button>
           </div>
-          <div className="mentor-nav-right">
+          <div className="mentor-nav-right flex items-center gap-2">
+            <Navbar />
             <div className="mentor-user-meta">
               <span className="mentor-user-name">{mentorName}</span>
               <span className="mentor-user-role">Mentor</span>

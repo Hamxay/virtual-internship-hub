@@ -149,15 +149,6 @@ class StudentProjectAssignment(models.Model):
         on_delete=models.CASCADE,
         related_name='project_assignments',
     )
-    mentor = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='mentored_assignments',
-        limit_choices_to={'role': 'MENTOR'},
-        help_text='Mentor associated with this assignment (set when a mentor reviews).',
-    )
     project_template = models.ForeignKey(
         ProjectTemplate,
         on_delete=models.CASCADE,
@@ -284,6 +275,15 @@ class SubmissionEvaluation(models.Model):
     reviewed_at = models.DateTimeField(auto_now_add=True)
     mentor_feedback = models.TextField(blank=True, null=True)
     is_human_reviewed = models.BooleanField(default=False)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='submission_evaluations_reviewed',
+        limit_choices_to={'role': 'MENTOR'},
+        help_text='Mentor who performed the human review (FCFS in domain; set on review).',
+    )
 
     class Meta:
         db_table = 'submission_evaluations'

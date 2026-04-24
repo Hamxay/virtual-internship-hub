@@ -107,17 +107,19 @@ class MentorReviewActionView(APIView):
         with transaction.atomic():
             evaluation.mentor_feedback = mentor_feedback
             evaluation.is_human_reviewed = True
-            evaluation.save(update_fields=['mentor_feedback', 'is_human_reviewed'])
+            evaluation.reviewed_by = request.user
+            evaluation.save(
+                update_fields=['mentor_feedback', 'is_human_reviewed', 'reviewed_by']
+            )
 
-            assignment.mentor = request.user
             if approved:
                 assignment.status = 'COMPLETED'
                 assignment.completed_at = timezone.now()
-                assignment.save(update_fields=['mentor', 'status', 'completed_at'])
+                assignment.save(update_fields=['status', 'completed_at'])
             else:
                 assignment.status = 'NEEDS_REVISION'
                 assignment.completed_at = None
-                assignment.save(update_fields=['mentor', 'status', 'completed_at'])
+                assignment.save(update_fields=['status', 'completed_at'])
 
             # Clear FLAGGED so the submission no longer matches the mentor queue filter.
             if submission.status == 'FLAGGED':

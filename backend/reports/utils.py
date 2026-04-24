@@ -255,10 +255,15 @@ def calculate_student_personal_progress(user):
 
 def get_mentor_cohort_summary(mentor_user):
     """
-    Aggregate submission scores for assignments linked to this mentor.
+    Aggregate scores for submissions where this mentor completed the human review
+    (FCFS among mentors in matching domain; see SubmissionEvaluation.reviewed_by).
     """
     submissions = (
-        ProjectSubmission.objects.filter(assignment__mentor=mentor_user)
+        ProjectSubmission.objects.filter(
+            evaluations__reviewed_by=mentor_user,
+            evaluations__is_human_reviewed=True,
+        )
+        .distinct()
         .select_related('assignment__student')
         .prefetch_related(
             Prefetch('evaluations', queryset=SubmissionEvaluation.objects.all()),

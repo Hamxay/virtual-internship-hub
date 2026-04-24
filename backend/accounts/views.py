@@ -1,6 +1,7 @@
 """
 All API views in one file. Sections: Auth, Student, Mentor, Admin, Domains.
 """
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status, generics, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -15,6 +16,7 @@ from .models import User, StudentProfile, MentorProfile, Domain, PendingRegistra
 from .serializers import (
     UserRegistrationSerializer,
     UserLoginSerializer,
+    LoginResponseSerializer,
     UserSerializer,
     CreateAdministratorSerializer,
     StudentProfileSerializer,
@@ -108,6 +110,23 @@ class LoginView(APIView):
     """POST auth/login/ – Login with email/password. Returns JWT tokens."""
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(
+        summary='Login',
+        description=(
+            'Authenticate with email and password. Returns JWT access/refresh tokens, '
+            'the user object, and a role-specific profile when the user is a student or mentor.'
+        ),
+        request=UserLoginSerializer,
+        responses={
+            200: LoginResponseSerializer,
+            400: OpenApiResponse(
+                description=(
+                    'Invalid credentials, inactive account, unverified email, or serializer errors '
+                    '(typical keys: non_field_errors, email, password).'
+                ),
+            ),
+        },
+    )
     def post(self, request):
         serializer = UserLoginSerializer(data=request.data, context={'request': request})
         if not serializer.is_valid():

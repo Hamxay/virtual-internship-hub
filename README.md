@@ -68,7 +68,8 @@ All commands from the **backend** directory with venv activated.
    ```bash
    python manage.py runserver
    ```
-   API: **http://localhost:8000** · Swagger: `/swagger/` · ReDoc: `/redoc/`
+   API: **http://localhost:8000** · Swagger: `/swagger/` · ReDoc: `/redoc/`  
+   **Full API list and flows:** [backend/README.md](backend/README.md)
 
 | Action           | Command |
 |------------------|--------|

@@ -167,6 +167,7 @@ class SubmissionEvaluationSerializer(serializers.ModelSerializer):
             'reviewed_at',
             'mentor_feedback',
             'is_human_reviewed',
+            'reviewed_by',
             'extracted_tags',
         )
 

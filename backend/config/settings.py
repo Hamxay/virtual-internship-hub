@@ -20,6 +20,8 @@ ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
 
 # Application definition
 INSTALLED_APPS = [
+    'daphne',
+    'channels',
     'jazzmin',  # Must be before django.contrib.admin
     'django.contrib.admin',
     'django.contrib.auth',
@@ -39,6 +41,7 @@ INSTALLED_APPS = [
     'portfolio',
     'chat',
     'reports',
+    'notifications',
 ]
 
 MIDDLEWARE = [
@@ -137,6 +140,43 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 20,
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
+    ],
+}
+
+# OpenAPI / Swagger (drf-spectacular)
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Virtual Internship Hub API',
+    'DESCRIPTION': (
+        'REST API for Virtual Internship Hub: authentication, assessments, '
+        'projects, mentoring, portfolios, career chat, and analytics.'
+    ),
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    # OpenAPI/Swagger: show Bearer JWT only (hide SessionAuthentication / cookieAuth).
+    'AUTHENTICATION_WHITELIST': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
+    'TAGS': [
+        {
+            'name': 'accounts',
+            'description': 'Auth (JWT), user profiles, student/mentor lists, admin users, domains.',
+        },
+        {
+            'name': 'assessments',
+            'description': 'Student assessments and attempts; admin domain question bank.',
+        },
+        {
+            'name': 'projects',
+            'description': 'Project templates, assignments, submissions, and AI evaluation (admin & student).',
+        },
+        {'name': 'mentor', 'description': 'Mentor review queue and review actions.'},
+        {'name': 'portfolio', 'description': 'Public student portfolio by username.'},
+        {'name': 'chat', 'description': 'Career coach chat (Gemini-backed, student-only).'},
+        {'name': 'reports', 'description': 'Analytics, exports, and progress reporting.'},
+        {'name': 'other', 'description': 'Miscellaneous endpoints.'},
+    ],
+    'POSTPROCESSING_HOOKS': [
+        'config.spectacular_hooks.tag_paths_by_app',
     ],
 }
 
@@ -299,6 +339,32 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 
-# --- Google Gemini (FR4 AI evaluator) ---
+# --- ASGI / Django Channels (FR10 live notifications) ---
+ASGI_APPLICATION = 'config.asgi.application'
+REDIS_URL = config('REDIS_URL', default='redis://localhost:6379/1')
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [REDIS_URL],
+        },
+    },
+}
+
+# --- Google Gemini (FR4 AI project evaluation only; career chat uses OpenRouter below) ---
+# Default: 2.5 Flash — current stable free-tier workhorse (better than retired 1.5 / winding-down 2.0 for many keys).
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
+GEMINI_MODEL = config('GEMINI_MODEL', default='gemini-2.5-flash')
+
+# --- OpenRouter (FR7 career chat only; required for /api/chat/) ---
+OPENROUTER_API_KEY = config('OPENROUTER_API_KEY', default='')
+OPENROUTER_BASE_URL = config('OPENROUTER_BASE_URL', default='https://openrouter.ai/api/v1').rstrip('/')
+# Default: strong free instruct model (better instruction-following than openrouter/free roulette).
+# Fallback if 404: openrouter/free or meta-llama/llama-3.2-3b-instruct:free — set OPENROUTER_CHAT_MODEL.
+OPENROUTER_CHAT_MODEL = config(
+    'OPENROUTER_CHAT_MODEL',
+    default='meta-llama/llama-3.3-70b-instruct:free',
+)
+OPENROUTER_HTTP_REFERER = config('OPENROUTER_HTTP_REFERER', default='http://localhost:3000')
+OPENROUTER_APP_TITLE = config('OPENROUTER_APP_TITLE', default='Virtual Internship Hub')
 

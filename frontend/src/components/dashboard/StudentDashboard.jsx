@@ -9,12 +9,12 @@ import { buildProfileUpdatePayload, buildAssessmentSubmitPayload } from '../../s
 import { getErrorMessage } from '../../utilities/authUtils';
 import StudentTasksSection from './StudentTasksSection';
 import CareerCoachWidget from '../chat/CareerCoachWidget';
+import Navbar from '../layout/Navbar';
 import {
   GraduationCapIcon,
   LayoutDashboardIcon,
   CheckSquareIcon,
   FolderOpenIcon,
-  BellIcon,
   LogOutIcon,
   AlertCircleIcon,
   CheckCircleIcon,
@@ -398,7 +398,6 @@ function StudentDashboard() {
   const [, setAttemptCount] = useState(0);
   const [attemptCountToday, setAttemptCountToday] = useState(0); // from attempts list, for "X of 2 used today"
   const [lastAttempt, setLastAttempt] = useState(null);
-  const [showNotifications, setShowNotifications] = useState(false);
   const [assessmentView, setAssessmentView] = useState('idle'); // 'idle' | 'intro' | 'test' | 'result'
   const [composedData, setComposedData] = useState(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -740,10 +739,7 @@ function StudentDashboard() {
                 View My Public Portfolio
               </a>
             ) : null}
-            <button type="button" className="nav-icon-btn relative" onClick={() => setShowNotifications(!showNotifications)} aria-label="Notifications">
-              <BellIcon className="w-5 h-5" />
-              <span className="absolute top-0 right-0 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">0</span>
-            </button>
+            <Navbar />
             <div className="nav-actions" style={{ gap: '0.75rem' }}>
               <div className="hidden sm:block text-right">
                 <div className="nav-user-name">{studentName}</div>

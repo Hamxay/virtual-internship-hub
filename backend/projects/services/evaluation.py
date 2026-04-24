@@ -34,7 +34,10 @@ from projects.utils.prompt_builder import build_evaluation_prompt
 
 logger = logging.getLogger(__name__)
 
-GEMINI_MODEL_NAME = 'gemini-1.5-flash'
+
+def _gemini_model_id() -> str:
+    name = (getattr(settings, 'GEMINI_MODEL', None) or '').strip()
+    return name or 'gemini-2.5-flash'
 
 
 def _strip_json_fences(raw_text: str) -> str:
@@ -137,7 +140,7 @@ def _run_gemini_evaluation(submission: ProjectSubmission, student_text: str, upl
     system_instruction, user_prompt = build_evaluation_prompt(template, student_text)
 
     model = genai.GenerativeModel(
-        GEMINI_MODEL_NAME,
+        _gemini_model_id(),
         system_instruction=system_instruction,
         generation_config={'response_mime_type': 'application/json'},
     )
@@ -332,7 +335,7 @@ def _apply_parsed_evaluation(submission, data: dict) -> SubmissionEvaluation:
 
     evaluation = SubmissionEvaluation.objects.create(
         submission=submission,
-        model_name=GEMINI_MODEL_NAME,
+        model_name=_gemini_model_id(),
         overall_score=overall_score,
         correctness_score=correctness_score,
         originality_score=originality_score,
@@ -354,7 +357,7 @@ def _apply_parsed_evaluation(submission, data: dict) -> SubmissionEvaluation:
     submission.status = 'EVALUATED'
     submission.metadata = {
         **(submission.metadata or {}),
-        'evaluated_with': GEMINI_MODEL_NAME,
+        'evaluated_with': _gemini_model_id(),
         'fr4_recommended_next_difficulty': difficulty_raw,
         'fr4_extracted_tags': extracted_tags,
     }
@@ -732,7 +735,7 @@ def evaluate_submission_heuristic(submission):
 
 def evaluate_submission_logic(submission_id: int) -> SubmissionEvaluation:
     """
-    FR4: pre-AI gatekeepers, Gemini 1.5 Flash JSON evaluation, or heuristic fallback.
+    FR4: pre-AI gatekeepers, Gemini JSON evaluation (see settings.GEMINI_MODEL), or heuristic fallback.
 
     Syntax / plagiarism checks run before Gemini (and before heuristic fallback) to save tokens
     and enforce policy. Persistence is wrapped in ``transaction.atomic`` per path.

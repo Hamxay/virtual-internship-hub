@@ -1,4 +1,5 @@
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -8,10 +9,13 @@ from accounts.permissions import IsStudent
 from .models import ChatMessage, ChatSession
 from .serializers import (
     ChatMessageSerializer,
+    ChatSendMessageResponseSerializer,
     ChatSendMessageSerializer,
     ChatSessionListSerializer,
+    ServiceUnavailableSerializer,
 )
-from .utils import build_career_coach_prompt, run_career_coach_gemini
+from .scope import OFF_SCOPE_COACH_REPLY, user_message_in_career_scope
+from .utils import build_career_coach_prompt, run_career_coach
 
 
 class ChatSessionListView(generics.ListAPIView):
@@ -25,6 +29,26 @@ class ChatSessionListView(generics.ListAPIView):
 class ChatSendMessageView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsStudent]
 
+    @extend_schema(
+        summary='Send career coach message',
+        description=(
+            'Student-only. Sends a user message; creates a new chat session if `session_id` '
+            'is omitted. Uses OpenRouter (`OPENROUTER_API_KEY`, `OPENROUTER_CHAT_MODEL`). '
+            'Obvious biography/trivia or code-help prompts without a career link may get a '
+            'fixed refusal (no LLM call). Project AI evaluation still uses Gemini (`GEMINI_API_KEY`).'
+        ),
+        request=ChatSendMessageSerializer,
+        responses={
+            200: ChatSendMessageResponseSerializer,
+            401: OpenApiResponse(description='Not authenticated'),
+            403: OpenApiResponse(description='Not a student'),
+            503: OpenApiResponse(
+                response=ServiceUnavailableSerializer,
+                description='LLM not configured, rate limited, or provider error',
+            ),
+        },
+        tags=['chat'],
+    )
     def post(self, request):
         ser = ChatSendMessageSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
@@ -49,10 +73,13 @@ class ChatSendMessageView(APIView):
         history = [(role, text) for role, text in recent]
 
         system_instruction = build_career_coach_prompt(request.user)
-        try:
-            reply_text = run_career_coach_gemini(system_instruction, history)
-        except RuntimeError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        if not user_message_in_career_scope(content):
+            reply_text = OFF_SCOPE_COACH_REPLY
+        else:
+            try:
+                reply_text = run_career_coach(system_instruction, history)
+            except RuntimeError as exc:
+                return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         assistant = ChatMessage.objects.create(
             session=session,

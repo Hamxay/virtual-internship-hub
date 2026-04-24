@@ -5,6 +5,7 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { NotificationToastProvider } from './components/ui/NotificationToast';
 import { AuthPage, ProtectedRoute } from './components/auth';
 import HomePage from './components/home/HomePage';
 import PublicPortfolioPage from './components/portfolio/PublicPortfolioPage';
@@ -84,7 +85,9 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <AppRoutes />
+        <NotificationToastProvider>
+          <AppRoutes />
+        </NotificationToastProvider>
       </AuthProvider>
     </Router>
   );

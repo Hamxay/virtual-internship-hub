@@ -1,11 +1,13 @@
 """
-FR7 career coach: context injection (RAG-style grounding) for Gemini.
+FR7 career coach: context injection (RAG-style grounding).
+Chat completions use **OpenRouter** only. FR4 project evaluation uses Gemini in ``projects``.
 """
 from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, List, Tuple
 
+import requests
 from django.conf import settings
 
 from accounts.models import StudentProfile
@@ -15,8 +17,6 @@ if TYPE_CHECKING:
     from accounts.models import User
 
 logger = logging.getLogger(__name__)
-
-CHAT_GEMINI_MODEL = 'gemini-1.5-flash'
 
 
 def _student_domains(user: 'User') -> list[str]:
@@ -93,10 +93,13 @@ def build_career_coach_prompt(user: 'User') -> str:
 - If the user asks for coding, debugging, homework solutions, or unrelated topics (medical,
   legal, politics, personal therapy, etc.), **briefly refuse** and **pivot** back to career
   development, internships, motivation, or portfolio/Upwork positioning aligned with their state.
+- Do **not** answer biography or general-knowledge questions about public figures, history,
+  geography, or current events unless the user clearly ties them to **their own** career,
+  internship, or learning goals in this platform.
 - Keep tone supportive, concise, and actionable; no shame; age-appropriate professional language.
 """
 
-    return f"""You are the Virtual Internship Hub **AI Career Coach** (Gemini 1.5 Flash).
+    return f"""You are the Virtual Internship Hub **AI Career Coach**.
 
 ## Learner context (grounding — treat as facts for this user)
 - Username: {user.username}
@@ -116,45 +119,109 @@ def build_career_coach_prompt(user: 'User') -> str:
 """
 
 
-def run_career_coach_gemini(system_instruction: str, history: List[Tuple[str, str]]) -> str:
-    """
-    Call Gemini with a fixed system instruction and short in-session memory.
+def _openrouter_role(role: str) -> str:
+    if role == 'user':
+        return 'user'
+    return 'assistant'
 
-    ``history`` is chronological (oldest first): list of (role, content) with role in
-    {'user', 'model'}.
-    """
-    api_key = getattr(settings, 'GEMINI_API_KEY', '') or ''
-    if not str(api_key).strip():
-        raise RuntimeError('GEMINI_API_KEY is not configured.')
 
-    try:
-        import google.generativeai as genai
-    except ImportError as exc:
-        raise RuntimeError('google-generativeai is not installed.') from exc
+def _openrouter_choice_text(message: dict) -> str:
+    """Normalize ``choices[0].message.content`` (string or multimodal parts list)."""
+    content = message.get('content')
+    if content is None:
+        return ''
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: List[str] = []
+        for part in content:
+            if isinstance(part, dict):
+                if part.get('type') == 'text' and isinstance(part.get('text'), str):
+                    parts.append(part['text'])
+                elif isinstance(part.get('text'), str):
+                    parts.append(part['text'])
+            elif isinstance(part, str):
+                parts.append(part)
+        return ''.join(parts).strip()
+    return str(content).strip()
 
-    lines = []
+
+def _run_career_coach_openrouter(system_instruction: str, history: List[Tuple[str, str]]) -> str:
+    """OpenAI-compatible chat completions (OpenRouter)."""
+    api_key = (getattr(settings, 'OPENROUTER_API_KEY', None) or '').strip()
+    if not api_key:
+        raise RuntimeError('OPENROUTER_API_KEY is not configured.')
+
+    base = getattr(settings, 'OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1').rstrip('/')
+    model_id = (getattr(settings, 'OPENROUTER_CHAT_MODEL', None) or '').strip()
+    if not model_id:
+        raise RuntimeError('OPENROUTER_CHAT_MODEL is not set.')
+
+    messages = [{'role': 'system', 'content': system_instruction}]
     for role, text in history:
-        label = 'User' if role == 'user' else 'Coach'
-        lines.append(f'{label}: {text}')
-    transcript = '\n\n'.join(lines) if lines else '(no prior messages in this window)'
+        messages.append({'role': _openrouter_role(role), 'content': text or ''})
 
-    user_prompt = (
-        'Below is the recent conversation (most recent messages may be at the end). '
-        'Reply as the Career Coach to the latest user turn.\n\n'
-        f'{transcript}'
-    )
+    headers = {
+        'Authorization': f'Bearer {api_key}',
+        'Content-Type': 'application/json',
+    }
+    referer = (getattr(settings, 'OPENROUTER_HTTP_REFERER', None) or '').strip()
+    if referer:
+        headers['HTTP-Referer'] = referer
+    title = (getattr(settings, 'OPENROUTER_APP_TITLE', None) or '').strip()
+    if title:
+        # OpenRouter accepts X-Title; docs also recommend X-OpenRouter-Title for attribution.
+        headers['X-Title'] = title
+        headers['X-OpenRouter-Title'] = title
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(
-        CHAT_GEMINI_MODEL,
-        system_instruction=system_instruction,
-    )
-    response = model.generate_content(user_prompt)
+    url = f'{base}/chat/completions'
+    payload = {
+        'model': model_id,
+        'messages': messages,
+        'temperature': 0.7,
+    }
+
     try:
-        raw_text = response.text
-    except ValueError as exc:
-        logger.warning('Gemini career coach returned no text: %s', exc)
-        raise RuntimeError('Gemini returned no text (blocked or empty response).') from exc
-    if not raw_text or not raw_text.strip():
-        raise RuntimeError('Empty response from Gemini.')
-    return raw_text.strip()
+        resp = requests.post(url, headers=headers, json=payload, timeout=(15, 120))
+    except requests.RequestException as exc:
+        logger.warning('OpenRouter career coach request failed: %s', exc)
+        raise RuntimeError('Could not reach OpenRouter (network error).') from exc
+
+    if resp.status_code == 401:
+        raise RuntimeError('OpenRouter rejected the API key (401).')
+    if resp.status_code == 402:
+        raise RuntimeError('OpenRouter: insufficient credits or quota (402). Add credits or check your plan.')
+    if resp.status_code == 429:
+        raise RuntimeError('OpenRouter rate limit exceeded; try again shortly.')
+
+    try:
+        data = resp.json()
+    except ValueError:
+        logger.warning('OpenRouter non-JSON response status=%s body=%s', resp.status_code, resp.text[:500])
+        raise RuntimeError('OpenRouter returned an invalid response.') from None
+
+    if resp.status_code >= 400:
+        err = data.get('error') if isinstance(data, dict) else None
+        msg = err.get('message', resp.text[:300]) if isinstance(err, dict) else str(data)[:300]
+        raise RuntimeError(f'OpenRouter error ({resp.status_code}): {msg}')
+
+    choices = data.get('choices') if isinstance(data, dict) else None
+    if not choices:
+        raise RuntimeError('OpenRouter returned no choices.')
+    message = choices[0].get('message') if isinstance(choices[0], dict) else None
+    if not isinstance(message, dict):
+        raise RuntimeError('OpenRouter returned an unexpected choice shape.')
+    raw_text = _openrouter_choice_text(message)
+    if not raw_text:
+        raise RuntimeError('Empty response from OpenRouter.')
+    return raw_text
+
+
+def run_career_coach(system_instruction: str, history: List[Tuple[str, str]]) -> str:
+    """
+    Career coach reply via OpenRouter (``OPENROUTER_API_KEY`` / ``OPENROUTER_CHAT_MODEL``).
+
+    ``history`` is chronological (oldest first): (role, content) with role in {'user', 'model'}.
+    """
+    return _run_career_coach_openrouter(system_instruction, history)
+

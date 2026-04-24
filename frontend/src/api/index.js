@@ -10,3 +10,4 @@ export {
   downloadAuditCsv,
   fetchAuditCsvText,
 } from './reports.api';
+export { getNotifications, markAsRead, markAllAsRead } from './notifications.api';

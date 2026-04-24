@@ -176,6 +176,25 @@ class CreateAdministratorSerializer(serializers.Serializer):
         return UserSerializer(instance).data
 
 
+class AuthTokenPairSerializer(serializers.Serializer):
+    """JWT pair returned on successful login (OpenAPI / drf-spectacular)."""
+
+    refresh = serializers.CharField(help_text='JWT refresh token')
+    access = serializers.CharField(help_text='JWT access token')
+
+
+class LoginResponseSerializer(serializers.Serializer):
+    """Response body for POST /api/auth/login/ (matches LoginView)."""
+
+    user = UserSerializer()
+    profile = serializers.JSONField(
+        allow_null=True,
+        help_text='Student or mentor profile when applicable; null for administrators.',
+    )
+    tokens = AuthTokenPairSerializer()
+    message = serializers.CharField()
+
+
 class UserLoginSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
     password = serializers.CharField(write_only=True, required=True)

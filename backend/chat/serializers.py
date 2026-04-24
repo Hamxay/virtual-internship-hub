@@ -39,3 +39,17 @@ class ChatSendMessageSerializer(serializers.Serializer):
         if not text:
             raise serializers.ValidationError('Message cannot be empty.')
         return text
+
+
+class ChatSendMessageResponseSerializer(serializers.Serializer):
+    """OpenAPI / drf-spectacular only — mirrors ChatSendMessageView success payload."""
+
+    session_id = serializers.IntegerField()
+    user_message = ChatMessageSerializer()
+    assistant_message = ChatMessageSerializer()
+
+
+class ServiceUnavailableSerializer(serializers.Serializer):
+    """503 payload when Gemini is not configured or returns an error."""
+
+    detail = serializers.CharField()
