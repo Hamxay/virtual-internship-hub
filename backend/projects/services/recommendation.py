@@ -49,7 +49,7 @@ COMPLEXITY_RANK = {
 
 def apply_fr4_recommended_difficulty_if_higher(student, recommended_raw: str) -> None:
     """
-    After FR4 Gemini evaluation, raise ``StudentProgressSnapshot.current_complexity_band``
+    After FR4 evaluation, raise ``StudentProgressSnapshot.current_complexity_band``
     when the model recommends a strictly higher difficulty than the refreshed snapshot band.
     """
     rec = str(recommended_raw or 'BEGINNER').upper().strip()

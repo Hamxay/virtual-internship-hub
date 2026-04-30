@@ -17,7 +17,7 @@ from .models import (
 )
 
 
-# FR4 uploads — align with extractor + Gemini multimodal types
+# FR4 uploads — align with extractor-supported document and artifact types
 MAX_SUBMISSION_UPLOAD_BYTES = 15 * 1024 * 1024
 ALLOWED_SUBMISSION_UPLOAD_SUFFIXES = frozenset({
     '.pdf', '.doc', '.docx', '.xlsx', '.xls', '.txt',

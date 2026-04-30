@@ -91,20 +91,26 @@ class MentorReviewActionView(APIView):
         if submission.assignment.project_template.domain_id != domain.id:
             return Response({'detail': 'Not allowed for this submission.'}, status=status.HTTP_403_FORBIDDEN)
 
-        evaluation = (
-            SubmissionEvaluation.objects.filter(submission=submission)
-            .order_by('-reviewed_at', '-id')
-            .first()
-        )
-        if not evaluation:
-            return Response(
-                {'detail': 'No evaluation record exists for this submission.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         assignment = submission.assignment
 
         with transaction.atomic():
+            evaluation = (
+                SubmissionEvaluation.objects.select_for_update()
+                .filter(submission=submission)
+                .order_by('-reviewed_at', '-id')
+                .first()
+            )
+            if not evaluation:
+                return Response(
+                    {'detail': 'No evaluation record exists for this submission.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if evaluation.is_human_reviewed:
+                return Response(
+                    {'error': 'This submission has already been reviewed by a mentor.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
             evaluation.mentor_feedback = mentor_feedback
             evaluation.is_human_reviewed = True
             evaluation.reviewed_by = request.user

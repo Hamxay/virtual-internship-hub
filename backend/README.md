@@ -179,7 +179,7 @@ celery -A config worker -l info
 | **djangorestframework-simplejwt** | Access/refresh JWT, blacklist on logout/rotation |
 | **django-cors-headers** | Browser CORS for the React origin |
 | **psycopg2-binary** | PostgreSQL driver |
-| **python-decouple** | `settings.py` reads `SECRET_KEY`, DB, Celery, Gemini, OpenRouter from `.env` |
+| **python-decouple** | `settings.py` reads `SECRET_KEY`, DB, Celery, and OpenRouter settings from `.env` |
 | **Pillow** | Image handling where uploads need validation/thumbnails |
 | **drf-spectacular** | OpenAPI schema + Swagger/ReDoc |
 | **django-jazzmin** | Themed Django `/admin/` UI |
@@ -189,9 +189,8 @@ celery -A config worker -l info
 | **joblib** | Typical sklearn companion (serialization / parallelism if used) |
 | **nltk** | Tokenization for text features in evaluation (with regex fallback if import fails) |
 | **celery** + **redis** | Async task broker/result (`async_evaluate_submission`); broker URL in settings |
-| **google-generativeai** | **Gemini**: FR4 structured JSON evaluation + file upload path for PDFs/images in document extractor |
 | **python-docx** / **openpyxl** | Extract text/tables from student `.docx` / Excel uploads for prompts |
-| **requests** | HTTP to **OpenRouter** for career coach chat (`chat/utils.py`) |
+| **requests** | HTTP to **OpenRouter** for career coach chat and FR4 project evaluation |
 
 **Not always in `requirements.txt` but used in code paths:** standard library (`json`, `re`, `logging`, `pathlib`, `statistics`, etc.).
 
@@ -203,11 +202,11 @@ Logic is **not** only in views: heavy work is split into modules below. Views va
 
 | Module / package | Responsibility | Used by (typical) |
 |------------------|------------------|-------------------|
-| **`projects/services/evaluation.py`** | FR4 pipeline: extract submission (repo + files + text), gatekeepers (plagiarism/syntax), call **Gemini** or **heuristic** path, write **`SubmissionEvaluation`**, update **`StudentProjectAssignment`** status (e.g. `PENDING_MENTOR_REVIEW`, `NEEDS_REVISION`), refresh snapshot / difficulty | `evaluate_submission_logic()` ← **`projects/tasks.async_evaluate_submission`** (Celery) after student `POST …/submissions/` |
+| **`projects/services/evaluation.py`** | FR4 pipeline: extract submission (repo + files + text), gatekeepers (plagiarism/syntax), call **OpenRouter** or **heuristic** path, write **`SubmissionEvaluation`**, update **`StudentProjectAssignment`** status (e.g. `PENDING_MENTOR_REVIEW`, `NEEDS_REVISION`), refresh snapshot / difficulty | `evaluate_submission_logic()` ← **`projects/tasks.async_evaluate_submission`** (Celery) after student `POST …/submissions/` |
 | **`projects/services/evaluation_gatekeepers.py`** | Pre-AI checks (similarity caps, plagiarism triggers) | `evaluation.py` |
 | **`projects/services/extractor.py`** | Typed extraction result for gatekeepers / bundle | `evaluation.py` |
 | **`projects/utils/code_flattener.py`** | GitHub repo → text bundle for prompts | `evaluation.py` |
-| **`projects/utils/document_extractor.py`** | Local file → markdown text and/or **Gemini upload handles** (PDF, images, docx/xlsx via libraries above) | `evaluation.py` |
+| **`projects/utils/document_extractor.py`** | Local file → markdown text / binary artifact note (PDF/images) and text extraction for docx/xlsx/csv | `evaluation.py` |
 | **`projects/utils/prompt_builder.py`** | Build evaluation prompt for the model | `evaluation.py` |
 | **`projects/services/recommendation.py`** | **`update_student_progress_snapshot`**, **`refresh_recommended_assignments`**, **`apply_fr4_recommended_difficulty_if_higher`**, tag union from completed work | Student **recommended** GET; evaluation completion; mentor review completion |
 | **`projects/services/hybrid_recommender.py`** | **FR3** dual feed: **content-based** (cold start + TF–IDF on tags vs “successful” tags) and **collaborative** (**Surprise SVD**) when enough completed projects; respects snapshot difficulty bands | `recommendation.refresh_recommended_assignments` |
@@ -231,7 +230,7 @@ Logic is **not** only in views: heavy work is split into modules below. Views va
 3. Worker runs **`evaluate_submission_logic(submission_id)`** in **`evaluation.py`**:  
    - Builds text/media bundle (**`UniversalRepositoryFlattener`**, **`UniversalDocumentExtractor`**, notes/text).  
    - Gatekeepers in **`evaluation_gatekeepers`**.  
-   - Primary path: **Gemini** JSON rubric response (`google.generativeai`, model from **`GEMINI_MODEL`** / settings); fallback: **`evaluate_submission_heuristic`** (sklearn **TfidfVectorizer**, **cosine_similarity**, rubric math).  
+   - Primary path: **OpenRouter** JSON rubric response (model from **`OPENROUTER_PROJECT_EVAL_MODEL`**); fallback: **`evaluate_submission_heuristic`** (sklearn **TfidfVectorizer**, **cosine_similarity**, rubric math).  
    - Persists **`SubmissionEvaluation`**, updates **assignment** status / **`latest_evaluation_score`**, submission status.  
 4. Task **`finally`** runs janitor to delete uploaded file from disk after evaluation.
 
@@ -277,8 +276,7 @@ Logic is **not** only in views: heavy work is split into modules below. Views va
 |----------|----------|
 | `SECRET_KEY`, `DEBUG`, `DB_*` | Django + PostgreSQL |
 | `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, `CELERY_TASK_ALWAYS_EAGER` | Celery (Redis broker; eager = sync for dev) |
-| `GEMINI_API_KEY`, `GEMINI_MODEL` | FR4 AI evaluation |
-| `OPENROUTER_API_KEY`, `OPENROUTER_CHAT_MODEL`, `OPENROUTER_BASE_URL`, `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE` | FR7 career coach |
+| `OPENROUTER_API_KEY`, `OPENROUTER_PROJECT_EVAL_MODEL`, `OPENROUTER_CHAT_MODEL`, `OPENROUTER_BASE_URL`, `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE` | FR4 project evaluation + FR7 career coach |
 | Email `EMAIL_*` | OTP / mail from `accounts` services |
 
 See **`config/settings.py`** for defaults and full list.

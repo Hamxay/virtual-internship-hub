@@ -3,6 +3,7 @@ import logging
 import re
 from statistics import mean
 
+import requests
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
@@ -19,6 +20,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from projects.models import ProjectSubmission, SubmissionEvaluation
 from projects.services.evaluation_gatekeepers import (
     PLAGIARISM_STOP_THRESHOLD_PERCENT,
+    empty_content_gatekeeper,
     plagiarism_gatekeeper_triggers,
     pre_ai_plagiarism_max_similarity_percent,
     syntax_gatekeeper_result,
@@ -35,9 +37,12 @@ from projects.utils.prompt_builder import build_evaluation_prompt
 logger = logging.getLogger(__name__)
 
 
-def _gemini_model_id() -> str:
-    name = (getattr(settings, 'GEMINI_MODEL', None) or '').strip()
-    return name or 'gemini-2.5-flash'
+def _project_eval_model_id() -> str:
+    name = (getattr(settings, 'OPENROUTER_PROJECT_EVAL_MODEL', None) or '').strip()
+    if name:
+        return name
+    chat_default = (getattr(settings, 'OPENROUTER_CHAT_MODEL', None) or '').strip()
+    return chat_default or 'meta-llama/llama-3.3-70b-instruct:free'
 
 
 def _strip_json_fences(raw_text: str) -> str:
@@ -49,17 +54,117 @@ def _strip_json_fences(raw_text: str) -> str:
     return text
 
 
-def _parse_gemini_json(raw_text: str) -> dict:
+def _parse_model_json(raw_text: str) -> dict:
     cleaned = _strip_json_fences(raw_text)
     return json.loads(cleaned)
 
 
-def _build_fr4_student_bundle(submission: ProjectSubmission) -> tuple[str, list, SubmissionExtractResult]:
+def _validate_fr4_payload(data: dict) -> dict:
+    """
+    Strict FR4 schema validation for model output.
+
+    Required keys:
+    - overall_score: integer 0..100
+    - improvements: non-empty string
+    - extracted_tags: list[str]
+
+    Optional keys:
+    - correctness_score, originality_score, grammar_score, design_quality_score: 0..100
+    - recommended_next_difficulty / difficulty_recommendation: BEGINNER|INTERMEDIATE|ADVANCED
+    """
+    if not isinstance(data, dict):
+        raise ValueError('Model response must be a JSON object.')
+
+    allowed_keys = {
+        'overall_score',
+        'improvements',
+        'extracted_tags',
+        'correctness_score',
+        'originality_score',
+        'grammar_score',
+        'design_quality_score',
+        'recommended_next_difficulty',
+        'difficulty_recommendation',
+    }
+    unknown = sorted(set(data.keys()) - allowed_keys)
+    if unknown:
+        raise ValueError(f'Model response contains unsupported keys: {", ".join(unknown)}')
+
+    required_keys = {'overall_score', 'improvements', 'extracted_tags'}
+    missing = sorted(required_keys - set(data.keys()))
+    if missing:
+        raise ValueError(f'Model response missing required keys: {", ".join(missing)}')
+
+    try:
+        overall_score = int(data['overall_score'])
+    except (TypeError, ValueError):
+        raise ValueError('overall_score must be an integer.') from None
+    if overall_score < 0 or overall_score > 100:
+        raise ValueError('overall_score must be between 0 and 100.')
+
+    improvements = data['improvements']
+    if not isinstance(improvements, str) or not improvements.strip():
+        raise ValueError('improvements must be a non-empty string.')
+
+    extracted_tags = data['extracted_tags']
+    if not isinstance(extracted_tags, list):
+        raise ValueError('extracted_tags must be an array of strings.')
+    normalized_tags = []
+    for tag in extracted_tags:
+        if not isinstance(tag, str):
+            raise ValueError('extracted_tags must contain only strings.')
+        cleaned = tag.strip()
+        if cleaned:
+            normalized_tags.append(cleaned[:80])
+
+    normalized = {
+        **data,
+        'overall_score': overall_score,
+        'improvements': improvements.strip(),
+        'extracted_tags': normalized_tags[:25],
+    }
+
+    score_keys = (
+        'correctness_score',
+        'originality_score',
+        'grammar_score',
+        'design_quality_score',
+    )
+    for key in score_keys:
+        if key not in normalized:
+            continue
+        value = normalized[key]
+        if value is None and key == 'design_quality_score':
+            # Keep null semantics for non-applicable design dimension.
+            continue
+        try:
+            score = float(value)
+        except (TypeError, ValueError):
+            raise ValueError(f'{key} must be numeric in range 0..100.') from None
+        if score < 0 or score > 100:
+            raise ValueError(f'{key} must be in range 0..100.')
+        normalized[key] = score
+
+    difficulty_keys = ('recommended_next_difficulty', 'difficulty_recommendation')
+    for key in difficulty_keys:
+        if key not in normalized:
+            continue
+        raw = normalized[key]
+        if raw is None:
+            continue
+        label = str(raw).upper().strip()
+        if label not in {'BEGINNER', 'INTERMEDIATE', 'ADVANCED'}:
+            raise ValueError(f'{key} must be BEGINNER, INTERMEDIATE, or ADVANCED.')
+        normalized[key] = label
+
+    return normalized
+
+
+def _build_fr4_student_bundle(submission: ProjectSubmission) -> tuple[str, SubmissionExtractResult]:
     """
     Route: GitHub repository (ZIP flatten) and/or uploaded document path.
-    Returns ``(student_text_for_prompt, gemini_upload_handles, gatekeeper_extract)``.
+    Returns ``(student_text_for_prompt, gatekeeper_extract)``.
     """
-    handles: list = []
     sections: list[str] = []
 
     notes = (submission.notes or '').strip()
@@ -90,7 +195,6 @@ def _build_fr4_student_bundle(submission: ProjectSubmission) -> tuple[str, list,
                 outcome = UniversalDocumentExtractor.process(abs_path)
                 if outcome.text_markdown:
                     sections.append(outcome.text_markdown)
-                handles.extend(outcome.gemini_file_handles)
     except Exception as exc:
         logger.exception('Document extraction failed: %s', exc)
         sections.append(f'## Uploaded document\n(Document processing failed: {exc})')
@@ -99,65 +203,72 @@ def _build_fr4_student_bundle(submission: ProjectSubmission) -> tuple[str, list,
 
     gate = SubmissionExtractResult()
     gate.text_parts = [rendered] if rendered else []
-    return rendered, handles, gate
+    return rendered, gate
 
 
-def _delete_gemini_file_handles(handles: list) -> None:
-    if not handles:
-        return
-    api_key = getattr(settings, 'GEMINI_API_KEY', '') or ''
+def _run_openrouter_evaluation(submission: ProjectSubmission, student_text: str) -> dict:
+    api_key = (getattr(settings, 'OPENROUTER_API_KEY', '') or '').strip()
     if not str(api_key).strip():
-        return
-    try:
-        import google.generativeai as genai
-    except ImportError:
-        return
-    try:
-        genai.configure(api_key=api_key)
-        for handle in handles:
-            try:
-                name = getattr(handle, 'name', None) or getattr(handle, 'uri', None)
-                if name:
-                    genai.delete_file(name)
-            except Exception as exc:
-                logger.warning('Could not delete Gemini uploaded file: %s', exc)
-    except Exception as exc:
-        logger.warning('Gemini cleanup configure/delete failed: %s', exc)
+        raise RuntimeError('OPENROUTER_API_KEY is not configured.')
 
-
-def _run_gemini_evaluation(submission: ProjectSubmission, student_text: str, upload_handles: list) -> dict:
-    api_key = getattr(settings, 'GEMINI_API_KEY', '') or ''
-    if not str(api_key).strip():
-        raise RuntimeError('GEMINI_API_KEY is not configured.')
-
-    try:
-        import google.generativeai as genai
-    except ImportError as exc:
-        raise RuntimeError('google-generativeai is not installed.') from exc
-
-    genai.configure(api_key=api_key)
+    base = (getattr(settings, 'OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1') or '').rstrip('/')
+    if not base:
+        raise RuntimeError('OPENROUTER_BASE_URL is not configured.')
+    model_id = _project_eval_model_id()
     template = submission.assignment.project_template
     system_instruction, user_prompt = build_evaluation_prompt(template, student_text)
-
-    model = genai.GenerativeModel(
-        _gemini_model_id(),
-        system_instruction=system_instruction,
-        generation_config={'response_mime_type': 'application/json'},
-    )
-
-    handles = list(upload_handles or [])
+    headers = {
+        'Authorization': f'Bearer {api_key}',
+        'Content-Type': 'application/json',
+    }
+    referer = (getattr(settings, 'OPENROUTER_HTTP_REFERER', '') or '').strip()
+    if referer:
+        headers['HTTP-Referer'] = referer
+    title = (getattr(settings, 'OPENROUTER_APP_TITLE', '') or '').strip()
+    if title:
+        headers['X-Title'] = title
+        headers['X-OpenRouter-Title'] = title
+    payload = {
+        'model': model_id,
+        'temperature': 0.1,
+        'messages': [
+            {'role': 'system', 'content': system_instruction},
+            {'role': 'user', 'content': user_prompt},
+        ],
+    }
     try:
-        content_parts = handles + [user_prompt]
-        response = model.generate_content(content_parts)
-        try:
-            raw_text = response.text
-        except ValueError as exc:
-            raise RuntimeError('Gemini returned no text (blocked or empty response).') from exc
-        if not raw_text:
-            raise RuntimeError('Empty response from Gemini.')
-        return _parse_gemini_json(raw_text)
-    finally:
-        _delete_gemini_file_handles(handles)
+        response = requests.post(f'{base}/chat/completions', headers=headers, json=payload, timeout=(20, 180))
+    except requests.RequestException as exc:
+        raise RuntimeError(f'OpenRouter network failure: {exc}') from exc
+    try:
+        data = response.json()
+    except ValueError:
+        raise RuntimeError(f'OpenRouter returned non-JSON response (status {response.status_code}).') from None
+    if response.status_code >= 400:
+        err = data.get('error') if isinstance(data, dict) else None
+        msg = err.get('message') if isinstance(err, dict) else str(data)
+        raise RuntimeError(f'OpenRouter error ({response.status_code}): {msg}')
+    choices = data.get('choices') if isinstance(data, dict) else None
+    if not choices:
+        raise RuntimeError('OpenRouter returned no choices.')
+    message = choices[0].get('message') if isinstance(choices[0], dict) else None
+    if not isinstance(message, dict):
+        raise RuntimeError('OpenRouter returned invalid choice payload.')
+    content = message.get('content')
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict) and isinstance(item.get('text'), str):
+                parts.append(item['text'])
+            elif isinstance(item, str):
+                parts.append(item)
+        raw_text = ''.join(parts).strip()
+    else:
+        raw_text = str(content or '').strip()
+    if not raw_text:
+        raise RuntimeError('OpenRouter returned empty response content.')
+    parsed = _parse_model_json(raw_text)
+    return _validate_fr4_payload(parsed)
 
 
 def _coerce_fr4_int_score(value, default=0) -> int:
@@ -170,7 +281,7 @@ def _coerce_fr4_int_score(value, default=0) -> int:
 
 
 def _persist_syntax_gate_failure(submission, error_msg: str) -> SubmissionEvaluation:
-    """Python ``ast`` gatekeeper failed — correctness 0, pipeline stops before Gemini."""
+    """Python ``ast`` gatekeeper failed — correctness 0, pipeline stops before LLM evaluation."""
     assignment = submission.assignment
     summary = 'Submission failed automatic Python syntax validation.'
     evaluation = SubmissionEvaluation.objects.create(
@@ -212,8 +323,56 @@ def _persist_syntax_gate_failure(submission, error_msg: str) -> SubmissionEvalua
     return evaluation
 
 
+def _persist_empty_content_gate_failure(submission) -> SubmissionEvaluation:
+    """No extractable content — stops pipeline without LLM call."""
+    assignment = submission.assignment
+    improvements_msg = (
+        'Your submission did not contain any readable content and could not be evaluated. '
+        'If you submitted a GitHub repository URL, make sure the repository is public and the URL is correct. '
+        'If you uploaded a file, please re-upload in a supported text format (DOCX, XLSX, or TXT).'
+    )
+    summary = 'Submission returned no readable content and could not be evaluated.'
+    evaluation = SubmissionEvaluation.objects.create(
+        submission=submission,
+        model_name='fr4_empty_content_gatekeeper',
+        overall_score=0.0,
+        correctness_score=0.0,
+        originality_score=0.0,
+        grammar_score=0.0,
+        design_quality_score=0.0,
+        rubric_scores={'gatekeeper': 'empty_content'},
+        strengths=[],
+        improvements=[improvements_msg],
+        flags=['EMPTY_SUBMISSION'],
+        decision='REVISE_AND_RESUBMIT',
+        feedback_summary=summary,
+        evaluation_payload={'gatekeeper': 'empty_content'},
+    )
+    submission.status = 'EVALUATED'
+    submission.metadata = {
+        **(submission.metadata or {}),
+        'empty_content_gate_failed': True,
+        'evaluated_with': 'fr4_empty_content_gatekeeper',
+    }
+    submission.save(update_fields=['status', 'metadata'])
+    assignment.latest_evaluation_score = 0.0
+    assignment.latest_feedback_summary = summary
+    assignment.status = 'NEEDS_REVISION'
+    assignment.completed_at = None
+    assignment.save(
+        update_fields=[
+            'latest_evaluation_score',
+            'latest_feedback_summary',
+            'status',
+            'completed_at',
+        ]
+    )
+    update_student_progress_snapshot(assignment.student)
+    return evaluation
+
+
 def _persist_plagiarism_gate_failure(submission, similarity_pct: float) -> SubmissionEvaluation:
-    """TF-IDF similarity > 75% vs recent same-template submissions — FLAGGED, no Gemini."""
+    """TF-IDF similarity > 75% vs recent same-template submissions — FLAGGED, no LLM call."""
     assignment = submission.assignment
     summary = (
         f'Submission flagged: content similarity {similarity_pct:.1f}% exceeds the '
@@ -268,7 +427,7 @@ def _persist_plagiarism_gate_failure(submission, similarity_pct: float) -> Submi
 
 
 def _apply_parsed_evaluation(submission, data: dict) -> SubmissionEvaluation:
-    """Persist Gemini JSON (FR4 schema) to SubmissionEvaluation, assignment, and snapshot."""
+    """Persist OpenRouter JSON (FR4 schema) to SubmissionEvaluation, assignment, and snapshot."""
     assignment = submission.assignment
 
     overall_score = float(_coerce_fr4_int_score(data.get('overall_score'), 0))
@@ -335,7 +494,7 @@ def _apply_parsed_evaluation(submission, data: dict) -> SubmissionEvaluation:
 
     evaluation = SubmissionEvaluation.objects.create(
         submission=submission,
-        model_name=_gemini_model_id(),
+        model_name=_project_eval_model_id(),
         overall_score=overall_score,
         correctness_score=correctness_score,
         originality_score=originality_score,
@@ -349,7 +508,7 @@ def _apply_parsed_evaluation(submission, data: dict) -> SubmissionEvaluation:
         feedback_summary=feedback_summary,
         evaluation_payload={
             'recommended_next_difficulty': difficulty_raw,
-            'source': 'gemini_fr4',
+            'source': 'openrouter_fr4',
             'design_quality_score_null': design_null,
         },
     )
@@ -357,7 +516,7 @@ def _apply_parsed_evaluation(submission, data: dict) -> SubmissionEvaluation:
     submission.status = 'EVALUATED'
     submission.metadata = {
         **(submission.metadata or {}),
-        'evaluated_with': _gemini_model_id(),
+        'evaluated_with': _project_eval_model_id(),
         'fr4_recommended_next_difficulty': difficulty_raw,
         'fr4_extracted_tags': extracted_tags,
     }
@@ -640,7 +799,7 @@ def _build_feedback(submission, metrics, similarity_pct, overall_score, decision
 
 def evaluate_submission_heuristic(submission):
     """
-    Legacy local evaluator (TF-IDF / rubric heuristics). Used when Gemini is unavailable.
+    Legacy local evaluator (TF-IDF / rubric heuristics). Used when OpenRouter is unavailable.
     All ORM writes run inside ``transaction.atomic`` via ``evaluate_submission_logic``.
     """
     assignment = submission.assignment
@@ -668,7 +827,7 @@ def evaluate_submission_heuristic(submission):
     if similarity_pct >= rubric.plagiarism_threshold:
         decision = 'NEEDS_MENTOR_REVIEW'
     elif overall_score >= rubric.passing_score and rubric.allow_auto_accept:
-        # FR5: same as Gemini path — mentor confirms before completion (no auto ACCEPTED).
+        # FR5: same as model path — mentor confirms before completion (no auto ACCEPTED).
         decision = 'NEEDS_MENTOR_REVIEW'
     else:
         decision = 'REVISE_AND_RESUBMIT'
@@ -735,9 +894,9 @@ def evaluate_submission_heuristic(submission):
 
 def evaluate_submission_logic(submission_id: int) -> SubmissionEvaluation:
     """
-    FR4: pre-AI gatekeepers, Gemini JSON evaluation (see settings.GEMINI_MODEL), or heuristic fallback.
+    FR4: pre-AI gatekeepers, OpenRouter JSON evaluation, or heuristic fallback.
 
-    Syntax / plagiarism checks run before Gemini (and before heuristic fallback) to save tokens
+    Syntax / plagiarism checks run before OpenRouter (and before heuristic fallback) to save tokens
     and enforce policy. Persistence is wrapped in ``transaction.atomic`` per path.
     """
     submission = ProjectSubmission.objects.select_related(
@@ -745,9 +904,11 @@ def evaluate_submission_logic(submission_id: int) -> SubmissionEvaluation:
         'assignment__project_template__instruction',
         'assignment__project_template__rubric',
     ).get(pk=submission_id)
+    if submission.evaluations.exists():
+        return submission.evaluations.order_by('-reviewed_at', '-id').first()
 
     try:
-        student_text, upload_handles, extract = _build_fr4_student_bundle(submission)
+        student_text, extract = _build_fr4_student_bundle(submission)
     except Exception as exc:
         logger.exception('FR4 student bundle failed for submission %s: %s', submission_id, exc)
         student_text = (
@@ -755,9 +916,12 @@ def evaluate_submission_logic(submission_id: int) -> SubmissionEvaluation:
             or (submission.notes or '').strip()
             or '(No extractable student content.)'
         )
-        upload_handles = []
         extract = SubmissionExtractResult()
         extract.text_parts = [student_text]
+
+    if empty_content_gatekeeper(student_text):
+        with transaction.atomic():
+            return _persist_empty_content_gate_failure(submission)
 
     syntax_msg = syntax_gatekeeper_result(submission, extract)
     if syntax_msg:
@@ -769,17 +933,17 @@ def evaluate_submission_logic(submission_id: int) -> SubmissionEvaluation:
         with transaction.atomic():
             return _persist_plagiarism_gate_failure(submission, similarity_pct)
 
-    api_key = getattr(settings, 'GEMINI_API_KEY', '') or ''
+    api_key = getattr(settings, 'OPENROUTER_API_KEY', '') or ''
 
     if not str(api_key).strip():
-        logger.warning('GEMINI_API_KEY missing; using heuristic evaluator for submission %s', submission_id)
+        logger.warning('OPENROUTER_API_KEY missing; using heuristic evaluator for submission %s', submission_id)
         with transaction.atomic():
             return evaluate_submission_heuristic(submission)
 
     try:
-        parsed = _run_gemini_evaluation(submission, student_text, upload_handles)
+        parsed = _run_openrouter_evaluation(submission, student_text)
     except Exception as exc:
-        logger.exception('Gemini evaluation failed for submission %s: %s', submission_id, exc)
+        logger.exception('OpenRouter evaluation failed for submission %s: %s', submission_id, exc)
         with transaction.atomic():
             return evaluate_submission_heuristic(submission)
 

@@ -83,7 +83,7 @@ DATABASES = {
         'USER': config('DB_USER', default='postgres'),
         'PASSWORD': config('DB_PASSWORD', default='1234'),
         'HOST': config('DB_HOST', default='localhost'),
-        'PORT': config('DB_PORT', default='5433'),
+        'PORT': config('DB_PORT', default='5432'),
     }
 }
 
@@ -171,7 +171,7 @@ SPECTACULAR_SETTINGS = {
         },
         {'name': 'mentor', 'description': 'Mentor review queue and review actions.'},
         {'name': 'portfolio', 'description': 'Public student portfolio by username.'},
-        {'name': 'chat', 'description': 'Career coach chat (Gemini-backed, student-only).'},
+        {'name': 'chat', 'description': 'Career coach chat (OpenRouter-backed, student-only).'},
         {'name': 'reports', 'description': 'Analytics, exports, and progress reporting.'},
         {'name': 'other', 'description': 'Miscellaneous endpoints.'},
     ],
@@ -351,19 +351,18 @@ CHANNEL_LAYERS = {
     },
 }
 
-# --- Google Gemini (FR4 AI project evaluation only; career chat uses OpenRouter below) ---
-# Default: 2.5 Flash — current stable free-tier workhorse (better than retired 1.5 / winding-down 2.0 for many keys).
-GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
-GEMINI_MODEL = config('GEMINI_MODEL', default='gemini-2.5-flash')
-
-# --- OpenRouter (FR7 career chat only; required for /api/chat/) ---
+# --- OpenRouter (FR4 project evaluation + FR7 career chat) ---
 OPENROUTER_API_KEY = config('OPENROUTER_API_KEY', default='')
 OPENROUTER_BASE_URL = config('OPENROUTER_BASE_URL', default='https://openrouter.ai/api/v1').rstrip('/')
-# Default: strong free instruct model (better instruction-following than openrouter/free roulette).
-# Fallback if 404: openrouter/free or meta-llama/llama-3.2-3b-instruct:free — set OPENROUTER_CHAT_MODEL.
+# Override via OPENROUTER_CHAT_MODEL / OPENROUTER_PROJECT_EVAL_MODEL env vars.
+# Find valid free model IDs in your OpenRouter dashboard → Models → filter by "free".
 OPENROUTER_CHAT_MODEL = config(
     'OPENROUTER_CHAT_MODEL',
-    default='meta-llama/llama-3.3-70b-instruct:free',
+    default='openai/gpt-oss-120b:free',
+)
+OPENROUTER_PROJECT_EVAL_MODEL = config(
+    'OPENROUTER_PROJECT_EVAL_MODEL',
+    default='openai/gpt-oss-120b:free',
 )
 OPENROUTER_HTTP_REFERER = config('OPENROUTER_HTTP_REFERER', default='http://localhost:3000')
 OPENROUTER_APP_TITLE = config('OPENROUTER_APP_TITLE', default='Virtual Internship Hub')

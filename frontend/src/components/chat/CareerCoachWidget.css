@@ -1,5 +1,6 @@
-/* FR7 Career Coach — scoped widget (ccw-) */
+/* FR7 Career Coach widget — scoped under ccw- */
 
+/* ── FAB trigger ───────────────────────────────────────────── */
 .ccw-fab {
   position: fixed;
   right: 1.25rem;
@@ -13,86 +14,111 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
   color: #fff;
-  box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.45), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 10px 25px -5px rgba(20, 184, 166, 0.45), 0 4px 10px -4px rgba(0, 0, 0, 0.12);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-
 .ccw-fab:hover {
-  transform: scale(1.05);
-  box-shadow: 0 14px 28px -6px rgba(37, 99, 235, 0.5), 0 10px 12px -6px rgba(0, 0, 0, 0.12);
+  transform: scale(1.06);
+  box-shadow: 0 14px 28px -6px rgba(20, 184, 166, 0.55), 0 6px 12px -4px rgba(0, 0, 0, 0.14);
+}
+.ccw-fab svg {
+  width: 24px;
+  height: 24px;
 }
 
+/* ── Backdrop ──────────────────────────────────────────────── */
 .ccw-overlay {
   position: fixed;
   inset: 0;
   z-index: 1048;
-  background: rgba(15, 23, 42, 0.35);
+  background: rgba(15, 23, 42, 0.3);
+  border: none;
+  cursor: default;
   animation: ccw-fade-in 0.2s ease;
 }
 
+/* ── Panel ─────────────────────────────────────────────────── */
 .ccw-panel {
   position: fixed;
-  right: 1rem;
-  bottom: 1rem;
+  right: 1.1rem;
+  bottom: 1.1rem;
   z-index: 1050;
-  width: min(100vw - 2rem, 22rem);
-  height: min(100dvh - 6rem, 32rem);
-  max-height: calc(100vh - 5rem);
+  width: min(100vw - 2rem, 30rem);
+  height: calc(100dvh - 4.5rem);
+  max-height: calc(100dvh - 4.5rem);
   background: #fff;
-  border-radius: 14px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border-radius: 16px;
+  box-shadow: 0 24px 48px -12px rgba(15, 23, 42, 0.28), 0 8px 16px -6px rgba(15, 23, 42, 0.1);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: ccw-slide-up 0.22s ease;
+  animation: ccw-slide-up 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @keyframes ccw-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
-
 @keyframes ccw-slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
 }
 
+/* ── Header ────────────────────────────────────────────────── */
 .ccw-header {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.75rem 0.85rem;
-  background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
+  padding: 0.8rem 0.9rem;
+  background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%);
   color: #fff;
 }
-
-.ccw-header h2 {
+.ccw-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.ccw-header-avatar {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ccw-header-avatar svg {
+  width: 18px;
+  height: 18px;
+}
+.ccw-header-text { min-width: 0; }
+.ccw-header-text h2 {
   margin: 0;
   font-size: 0.9375rem;
   font-weight: 600;
   letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
+.ccw-header-text p {
+  margin: 0;
+  font-size: 0.7rem;
+  opacity: 0.8;
+  white-space: nowrap;
+}
 .ccw-header-actions {
   display: flex;
   align-items: center;
   gap: 0.15rem;
+  flex-shrink: 0;
 }
-
 .ccw-icon-btn {
   display: flex;
   align-items: center;
@@ -107,15 +133,11 @@
   cursor: pointer;
   transition: background 0.15s ease;
 }
+.ccw-icon-btn:hover { background: rgba(255, 255, 255, 0.28); }
+.ccw-icon-btn[aria-pressed='true'] { background: rgba(255, 255, 255, 0.35); }
+.ccw-icon-btn svg { width: 18px; height: 18px; }
 
-.ccw-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.28);
-}
-
-.ccw-icon-btn[aria-pressed='true'] {
-  background: rgba(255, 255, 255, 0.35);
-}
-
+/* ── Body ──────────────────────────────────────────────────── */
 .ccw-body {
   flex: 1;
   min-height: 0;
@@ -123,47 +145,57 @@
   flex-direction: column;
 }
 
-.ccw-history {
+/* ── Welcome state (empty chat) ────────────────────────────── */
+.ccw-welcome {
   flex: 1;
-  overflow-y: auto;
-  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1.25rem;
+  gap: 0.5rem;
+  text-align: center;
   background: #f8fafc;
 }
-
-.ccw-history-item {
-  width: 100%;
-  text-align: left;
-  padding: 0.65rem 0.75rem;
-  margin-bottom: 0.35rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  background: #fff;
-  cursor: pointer;
-  font-size: 0.8125rem;
-  color: #1e293b;
-  transition: border-color 0.15s ease, background 0.15s ease;
+.ccw-welcome-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ccfbf1, #99f6e4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.25rem;
 }
-
-.ccw-history-item:hover {
-  border-color: #93c5fd;
-  background: #eff6ff;
+.ccw-welcome-icon svg { width: 26px; height: 26px; color: #0d9488; }
+.ccw-welcome-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #0f172a;
 }
-
-.ccw-history-meta {
-  font-size: 0.7rem;
+.ccw-welcome-sub {
+  margin: 0;
+  font-size: 0.8rem;
   color: #64748b;
-  margin-top: 0.2rem;
+  line-height: 1.5;
+  max-width: 20rem;
 }
 
+/* ── Messages ──────────────────────────────────────────────── */
 .ccw-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 0.65rem 0.75rem;
+  padding: 0.75rem 0.85rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.55rem;
   background: #f1f5f9;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
 }
+.ccw-messages::-webkit-scrollbar { width: 4px; }
+.ccw-messages::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
 
 .ccw-empty {
   text-align: center;
@@ -173,138 +205,151 @@
   line-height: 1.5;
 }
 
+/* ── Chat bubbles ──────────────────────────────────────────── */
 .ccw-bubble {
-  max-width: 92%;
-  padding: 0.55rem 0.7rem;
-  border-radius: 12px;
+  max-width: 88%;
+  padding: 0.55rem 0.75rem;
+  border-radius: 14px;
   font-size: 0.8125rem;
-  line-height: 1.45;
+  line-height: 1.5;
   word-break: break-word;
 }
-
 .ccw-bubble-user {
   align-self: flex-end;
-  background: #2563eb;
+  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
   color: #fff;
   border-bottom-right-radius: 4px;
 }
-
 .ccw-bubble-model {
   align-self: flex-start;
   background: #fff;
   color: #0f172a;
   border: 1px solid #e2e8f0;
   border-bottom-left-radius: 4px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.ccw-bubble-time {
+  font-size: 0.65rem;
+  opacity: 0.7;
+  margin-top: 0.2rem;
 }
 
-.ccw-bubble-model .ccw-md {
-  font-size: 0.8125rem;
-}
-
-.ccw-bubble-model .ccw-md p {
-  margin: 0 0 0.5rem;
-}
-
-.ccw-bubble-model .ccw-md p:last-child {
-  margin-bottom: 0;
-}
-
+/* markdown inside model bubble */
+.ccw-bubble-model .ccw-md { font-size: 0.8125rem; }
+.ccw-bubble-model .ccw-md p { margin: 0 0 0.45rem; }
+.ccw-bubble-model .ccw-md p:last-child { margin-bottom: 0; }
 .ccw-bubble-model .ccw-md ul,
-.ccw-bubble-model .ccw-md ol {
-  margin: 0.35rem 0 0.35rem 1.1rem;
-  padding: 0;
-}
-
-.ccw-bubble-model .ccw-md li {
-  margin: 0.2rem 0;
-}
-
-.ccw-bubble-model .ccw-md strong {
-  font-weight: 600;
-}
-
+.ccw-bubble-model .ccw-md ol { margin: 0.3rem 0 0.3rem 1.1rem; padding: 0; }
+.ccw-bubble-model .ccw-md li { margin: 0.2rem 0; }
+.ccw-bubble-model .ccw-md strong { font-weight: 600; }
 .ccw-bubble-model .ccw-md code {
   font-size: 0.75em;
   background: #f1f5f9;
   padding: 0.1em 0.35em;
   border-radius: 4px;
 }
-
-.ccw-bubble-time {
-  font-size: 0.65rem;
-  opacity: 0.75;
-  margin-top: 0.25rem;
+.ccw-bubble-model .ccw-md h1,
+.ccw-bubble-model .ccw-md h2,
+.ccw-bubble-model .ccw-md h3 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0.5rem 0 0.25rem;
 }
 
+/* ── Typing indicator ──────────────────────────────────────── */
 .ccw-typing {
   align-self: flex-start;
-  padding: 0.5rem 0.75rem;
-  background: #e2e8f0;
-  border-radius: 12px;
-  font-size: 0.875rem;
-  color: #475569;
-  letter-spacing: 0.12em;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0.6rem 0.85rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.ccw-typing-dot {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #94a3b8;
+  animation: ccw-bounce 1.2s infinite ease-in-out;
+}
+.ccw-typing-dot:nth-child(1) { animation-delay: 0s; }
+.ccw-typing-dot:nth-child(2) { animation-delay: 0.18s; }
+.ccw-typing-dot:nth-child(3) { animation-delay: 0.36s; }
+@keyframes ccw-bounce {
+  0%, 60%, 100% { transform: translateY(0); background: #94a3b8; }
+  30% { transform: translateY(-5px); background: #14b8a6; }
 }
 
+/* ── Action chips ──────────────────────────────────────────── */
 .ccw-chips {
   flex-shrink: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
-  padding: 0.45rem 0.65rem;
+  padding: 0.5rem 0.75rem;
   background: #fff;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid #f1f5f9;
 }
-
 .ccw-chip {
   font-size: 0.7rem;
-  padding: 0.35rem 0.55rem;
+  padding: 0.35rem 0.65rem;
   border-radius: 9999px;
-  border: 1px solid #cbd5e1;
-  background: #f8fafc;
-  color: #334155;
+  border: 1px solid #99f6e4;
+  background: #f0fdfa;
+  color: #0f766e;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  font-weight: 500;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
-
-.ccw-chip:hover {
-  background: #eff6ff;
-  border-color: #93c5fd;
+.ccw-chip:hover:not(:disabled) {
+  background: #ccfbf1;
+  border-color: #5eead4;
+  transform: translateY(-1px);
 }
+.ccw-chip:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* ── Error banner ──────────────────────────────────────────── */
 .ccw-error {
   flex-shrink: 0;
-  padding: 0.4rem 0.65rem;
+  padding: 0.45rem 0.75rem;
   font-size: 0.75rem;
   color: #b91c1c;
   background: #fef2f2;
   border-top: 1px solid #fecaca;
 }
 
+/* ── Input row ─────────────────────────────────────────────── */
 .ccw-input-row {
   flex-shrink: 0;
   display: flex;
-  gap: 0.35rem;
-  padding: 0.5rem 0.65rem;
+  gap: 0.4rem;
+  padding: 0.55rem 0.75rem;
   background: #fff;
   border-top: 1px solid #e2e8f0;
 }
-
 .ccw-input-row input {
   flex: 1;
   min-width: 0;
-  padding: 0.5rem 0.65rem;
-  border: 1px solid #e2e8f0;
+  padding: 0.5rem 0.7rem;
+  border: 1.5px solid #e2e8f0;
   border-radius: 10px;
   font-size: 0.8125rem;
   outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  color: #0f172a;
+  background: #f8fafc;
 }
-
+.ccw-input-row input::placeholder { color: #94a3b8; }
 .ccw-input-row input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.15);
+  background: #fff;
 }
-
 .ccw-input-row button[type='submit'] {
   flex-shrink: 0;
   width: 2.5rem;
@@ -314,17 +359,85 @@
   justify-content: center;
   border: none;
   border-radius: 10px;
-  background: #2563eb;
+  background: linear-gradient(135deg, #14b8a6, #0d9488);
   color: #fff;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: opacity 0.15s, transform 0.12s;
 }
-
 .ccw-input-row button[type='submit']:hover:not(:disabled) {
-  background: #1d4ed8;
+  opacity: 0.9;
+  transform: scale(1.04);
 }
+.ccw-input-row button[type='submit']:disabled { opacity: 0.45; cursor: not-allowed; }
+.ccw-input-row button[type='submit'] svg { width: 16px; height: 16px; }
 
-.ccw-input-row button[type='submit']:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
+/* ── History view ──────────────────────────────────────────── */
+.ccw-history {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  background: #f8fafc;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.ccw-history::-webkit-scrollbar { width: 4px; }
+.ccw-history::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+
+.ccw-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.75rem 0.45rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+.ccw-history-header-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.ccw-new-chat-btn {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.3rem 0.65rem;
+  border: 1.5px solid #14b8a6;
+  border-radius: 9999px;
+  background: #f0fdfa;
+  color: #0f766e;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.ccw-new-chat-btn:hover { background: #ccfbf1; transform: translateY(-1px); }
+
+.ccw-history-list { padding: 0.4rem 0.55rem 0.55rem; display: flex; flex-direction: column; gap: 0.35rem; }
+
+.ccw-history-item {
+  width: 100%;
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+.ccw-history-item:hover {
+  border-color: #5eead4;
+  background: #f0fdfa;
+  transform: translateY(-1px);
+}
+.ccw-history-item__title {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ccw-history-meta {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  margin-top: 0.2rem;
 }

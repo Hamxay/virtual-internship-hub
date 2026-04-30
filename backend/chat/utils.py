@@ -1,6 +1,6 @@
 """
 FR7 career coach: context injection (RAG-style grounding).
-Chat completions use **OpenRouter** only. FR4 project evaluation uses Gemini in ``projects``.
+Chat completions use **OpenRouter**. FR4 project evaluation also uses OpenRouter in ``projects``.
 """
 from __future__ import annotations
 

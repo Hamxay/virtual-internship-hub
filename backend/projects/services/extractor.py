@@ -4,7 +4,7 @@ FR4 — Extract text or local file paths from student submissions for AI evaluat
 - ``.docx``: paragraph text via python-docx.
 - ``.xlsx``: sheet data as CSV-like string via pandas/openpyxl.
 - GitHub ``repository_url``: normalize blob URLs to raw.githubusercontent.com and GET text.
-- ``.pdf`` / common images: no text extraction here; return a local path for ``genai.upload_file``.
+- ``.pdf`` / common images: no text extraction here; return a local path marker for binary artifacts.
 """
 from __future__ import annotations
 
@@ -20,8 +20,8 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-# Extensions we hand off to Gemini as uploaded files (multimodal).
-GEMINI_DIRECT_UPLOAD_SUFFIXES = frozenset({
+# Binary extensions kept as local path references.
+BINARY_DIRECT_UPLOAD_SUFFIXES = frozenset({
     '.pdf',
     '.png',
     '.jpg',
@@ -40,8 +40,8 @@ class SubmissionExtractResult:
     text_parts: List[str] = field(default_factory=list)
     """Human-readable fragments concatenated into the LLM prompt."""
 
-    gemini_local_paths: List[str] = field(default_factory=list)
-    """Absolute paths to pass to ``google.generativeai.upload_file`` (PDF / images)."""
+    binary_local_paths: List[str] = field(default_factory=list)
+    """Absolute paths for binary artifacts (PDF / images)."""
 
 
 def _append_text(result: SubmissionExtractResult, label: str, body: str) -> None:
@@ -172,7 +172,7 @@ def resolve_local_path(file_field) -> Optional[str]:
 
 def extract_submission_for_evaluation(submission) -> SubmissionExtractResult:
     """
-    Build prompt text and optional Gemini upload paths from a ``ProjectSubmission``.
+    Build prompt text and optional binary artifact paths from a ``ProjectSubmission``.
 
     Expects ``submission.assignment`` and ``project_template`` to be usable (caller
     should ``select_related`` / ``prefetch_related`` as needed).
@@ -202,16 +202,16 @@ def extract_submission_for_evaluation(submission) -> SubmissionExtractResult:
     elif suffix in ('.xlsx', '.xls') or submission_type == 'SPREADSHEET':
         sheet_text = extract_text_from_xlsx(uploaded)
         _append_text(result, 'Uploaded spreadsheet', sheet_text)
-    elif suffix in GEMINI_DIRECT_UPLOAD_SUFFIXES or submission_type in ('PDF', 'DESIGN'):
+    elif suffix in BINARY_DIRECT_UPLOAD_SUFFIXES or submission_type in ('PDF', 'DESIGN'):
         local_path = resolve_local_path(uploaded)
         if local_path:
-            result.gemini_local_paths.append(local_path)
+            result.binary_local_paths.append(local_path)
         else:
             _append_text(result, 'Uploaded file', f'(Binary file: {uploaded.name}; path not on local disk.)')
     else:
         local_path = resolve_local_path(uploaded)
-        if local_path and suffix in GEMINI_DIRECT_UPLOAD_SUFFIXES:
-            result.gemini_local_paths.append(local_path)
+        if local_path and suffix in BINARY_DIRECT_UPLOAD_SUFFIXES:
+            result.binary_local_paths.append(local_path)
         else:
             _append_text(
                 result,

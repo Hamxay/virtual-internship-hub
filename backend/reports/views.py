@@ -3,11 +3,12 @@ import csv
 from django.http import StreamingHttpResponse
 from django.db.models import Prefetch
 from rest_framework import status
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.models import User
+from accounts.permissions import IsAdministrator
 from projects.models import ProjectSubmission, ProjectTemplate, SubmissionEvaluation
 
 from .utils import (
@@ -19,7 +20,7 @@ from .utils import (
 
 
 class AdminAnalyticsView(APIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAuthenticated, IsAdministrator]
 
     def get(self, request, *args, **kwargs):
         kpis = {
@@ -43,7 +44,7 @@ class _CSVBuffer:
 
 
 class PlatformAuditExportView(APIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAuthenticated, IsAdministrator]
 
     def get(self, request, *args, **kwargs):
         qs = (

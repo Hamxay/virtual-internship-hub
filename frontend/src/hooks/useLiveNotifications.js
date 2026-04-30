@@ -5,13 +5,13 @@ import { getNotifications, markAsRead as markAsReadApi, markAllAsRead as markAll
 import { API_BASE_URL } from '../api/client';
 
 function buildNotificationsWsUrl(token) {
-  const base = API_BASE_URL || 'http://localhost:8000/api';
+  const base = API_BASE_URL || 'http://localhost:8001/api';
   try {
     const u = new URL(base);
     const wsProto = u.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${wsProto}//${u.host}/ws/notifications/?token=${encodeURIComponent(token)}`;
   } catch {
-    return `ws://localhost:8000/ws/notifications/?token=${encodeURIComponent(token)}`;
+    return `ws://localhost:8001/ws/notifications/?token=${encodeURIComponent(token)}`;
   }
 }
 

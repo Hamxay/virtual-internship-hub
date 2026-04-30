@@ -22,12 +22,21 @@ class ChatSessionSerializer(serializers.ModelSerializer):
 
 
 class ChatSessionListSerializer(serializers.ModelSerializer):
-    """Lightweight session row for listing."""
+    """Lightweight session row for listing — includes first-message preview."""
+
+    preview = serializers.SerializerMethodField()
 
     class Meta:
         model = ChatSession
-        fields = ('id', 'created_at')
+        fields = ('id', 'created_at', 'preview')
         read_only_fields = fields
+
+    def get_preview(self, obj):
+        first = obj.messages.filter(role='user').order_by('timestamp', 'id').first()
+        if not first:
+            return None
+        text = first.content or ''
+        return text[:60] + ('…' if len(text) > 60 else '')
 
 
 class ChatSendMessageSerializer(serializers.Serializer):
@@ -50,6 +59,6 @@ class ChatSendMessageResponseSerializer(serializers.Serializer):
 
 
 class ServiceUnavailableSerializer(serializers.Serializer):
-    """503 payload when Gemini is not configured or returns an error."""
+    """503 payload when OpenRouter is not configured or returns an error."""
 
     detail = serializers.CharField()

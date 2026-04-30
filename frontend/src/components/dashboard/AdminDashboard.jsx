@@ -5,6 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { adminApi } from '../../api/admin.api';
+import { getAdminAnalytics } from '../../api/reports.api';
 import { useDomains, invalidateDomainsCache } from '../../hooks/useDomains';
 import { buildDomainPayload, buildQuestionPayload } from '../../services/admin.service';
 import AdminProjectsSection from './AdminProjectsSection';
@@ -151,21 +152,68 @@ function AdminDashboard() {
 }
 
 function AdminDashboardHome() {
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [evalData, setEvalData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    Promise.all([
+      getAdminAnalytics(),
+      adminApi.getEvaluationSummary(),
+    ])
+      .then(([analytics, evalRes]) => {
+        if (cancelled) return;
+        setAnalyticsData(analytics);
+        setEvalData(evalRes?.data ?? null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        const msg = err?.response?.data?.detail || err?.message || 'Failed to load platform stats.';
+        setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const kpis = analyticsData?.kpis ?? {};
+  const growth = analyticsData?.progress?.platform_average_growth ?? null;
+
+  const val = (v) => (loading ? '…' : (v ?? '—'));
+
   const metrics = [
-    { label: 'Total Students', value: '—', icon: GraduationCapIcon, iconBg: '#eff6ff', iconColor: '#2563eb' },
-    { label: 'Active Mentors', value: '—', icon: UsersIcon, iconBg: '#f5f3ff', iconColor: '#7c3aed' },
-    { label: 'Active Assessments', value: '—', icon: FileTextIcon, iconBg: '#ecfdf5', iconColor: '#059669' },
-    { label: 'Pending Submissions', value: '—', icon: ClockIcon, iconBg: '#fff7ed', iconColor: '#ea580c' },
+    { label: 'Total Students', value: val(kpis.total_students), icon: GraduationCapIcon, iconBg: '#eff6ff', iconColor: '#2563eb' },
+    { label: 'Total Mentors', value: val(kpis.total_mentors), icon: UsersIcon, iconBg: '#f5f3ff', iconColor: '#7c3aed' },
+    { label: 'Project Templates', value: val(evalData?.template_count), icon: FolderKanbanIcon, iconBg: '#ecfdf5', iconColor: '#059669' },
+    { label: 'Flagged Submissions', value: val(evalData?.flagged_submissions), icon: ClockIcon, iconBg: '#fff7ed', iconColor: '#ea580c' },
   ];
 
-  const recentActivities = [
-    { id: 1, text: 'Platform ready. Connect backend to see real data.', time: '—' },
-  ];
+  const summaryRows = evalData ? [
+    { id: 1, label: 'Total assignments', value: evalData.assignment_count ?? 0 },
+    { id: 2, label: 'Completed', value: evalData.completed_projects ?? 0 },
+    { id: 3, label: 'In progress', value: evalData.in_progress ?? 0 },
+    { id: 4, label: 'Needs revision', value: evalData.needs_revision ?? 0 },
+    { id: 5, label: 'Avg. completed score', value: evalData.average_completed_score != null ? `${evalData.average_completed_score}` : '—' },
+    { id: 6, label: 'Platform skill growth', value: growth != null ? `${growth > 0 ? '+' : ''}${growth}%` : '—' },
+  ] : [];
 
   return (
     <div className="dashboard-section">
       <h1>Dashboard Overview</h1>
-      <p className="section-desc">Welcome back. Here&apos;s a summary of your platform (connect API for live data).</p>
+      <p className="section-desc">
+        {loading ? 'Loading platform stats…' : "Live summary of your platform."}
+      </p>
+      {error && (
+        <p style={{ color: '#dc2626', marginBottom: '1rem', fontSize: '0.875rem', background: '#fef2f2', padding: '0.6rem 0.9rem', borderRadius: 8 }}>
+          {error}
+        </p>
+      )}
 
       <div className="metrics-grid">
         {metrics.map((m) => {
@@ -183,15 +231,21 @@ function AdminDashboardHome() {
       </div>
 
       <div className="activity-list" style={{ marginTop: '1.5rem' }}>
-        <div className="p-4 border-b border-gray-200 font-medium text-gray-900">Recent Activity</div>
-        {recentActivities.map((a) => (
-          <div key={a.id} className="activity-item">
-            <div>
-              <span className="text-gray-900">{a.text}</span>
-              <span className="text-gray-500 text-sm ml-2">{a.time}</span>
+        <div style={{ padding: '0.85rem 1rem', borderBottom: '1px solid #e5e7eb', fontWeight: 600, fontSize: '0.9375rem', color: '#111827' }}>
+          Platform Summary
+        </div>
+        {loading ? (
+          <div className="activity-item" style={{ color: '#6b7280' }}>Loading…</div>
+        ) : summaryRows.length === 0 ? (
+          <div className="activity-item" style={{ color: '#6b7280' }}>No data available yet.</div>
+        ) : (
+          summaryRows.map((row) => (
+            <div key={row.id} className="activity-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: '#374151' }}>{row.label}</span>
+              <span style={{ fontWeight: 600, color: '#111827' }}>{row.value}</span>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );

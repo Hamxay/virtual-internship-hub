@@ -35,7 +35,7 @@ class ChatSendMessageView(APIView):
             'Student-only. Sends a user message; creates a new chat session if `session_id` '
             'is omitted. Uses OpenRouter (`OPENROUTER_API_KEY`, `OPENROUTER_CHAT_MODEL`). '
             'Obvious biography/trivia or code-help prompts without a career link may get a '
-            'fixed refusal (no LLM call). Project AI evaluation still uses Gemini (`GEMINI_API_KEY`).'
+            'fixed refusal (no LLM call). Project AI evaluation also uses OpenRouter.'
         ),
         request=ChatSendMessageSerializer,
         responses={

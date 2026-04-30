@@ -1,6 +1,7 @@
 from datetime import timedelta
 
-from django.db.models import Avg, Count
+from django.db import transaction
+from django.db.models import Avg, Count, Max
 from django.utils import timezone
 from rest_framework import generics, permissions, status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -144,15 +145,18 @@ class StudentSubmissionCreateView(APIView):
         if not assignment:
             return Response({'detail': 'Assignment not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        version = assignment.submissions.count() + 1
-        serializer = ProjectSubmissionCreateSerializer(
-            data=request.data,
-            context={'assignment': assignment, 'version': version},
-        )
-        serializer.is_valid(raise_exception=True)
-        submission = serializer.save()
-        assignment.status = 'SUBMITTED'
-        assignment.save(update_fields=['status'])
+        with transaction.atomic():
+            locked_assignment = StudentProjectAssignment.objects.select_for_update().get(pk=assignment.pk)
+            latest_version = locked_assignment.submissions.aggregate(Max('version'))['version__max']
+            version = (latest_version or 0) + 1
+            serializer = ProjectSubmissionCreateSerializer(
+                data=request.data,
+                context={'assignment': locked_assignment, 'version': version},
+            )
+            serializer.is_valid(raise_exception=True)
+            submission = serializer.save()
+            locked_assignment.status = 'SUBMITTED'
+            locked_assignment.save(update_fields=['status'])
         async_evaluate_submission.delay(submission.pk)
         submission.refresh_from_db()
         return Response(ProjectSubmissionSerializer(submission).data, status=status.HTTP_201_CREATED)

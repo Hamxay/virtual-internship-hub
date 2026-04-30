@@ -56,222 +56,206 @@ function statusBadgeClass(status) {
   return 'beginner';
 }
 
-/** What to do + full brief (shown under each project card when expanded). */
-function TaskExpandedDetails({ assignment }) {
+/** Project details popup — shows on card click. */
+function ProjectDetailsModal({ assignment, onClose, onOpenSubmit }) {
   const template = assignment.project_template || {};
   const inst = template.instruction || {};
   const submissionReqs = Array.isArray(inst.submission_requirements) ? inst.submission_requirements : [];
   const deliverables = Array.isArray(inst.deliverables) ? inst.deliverables : [];
   const steps = Array.isArray(inst.steps) ? inst.steps : [];
-  const hasMoreBrief = Boolean(
+  const hasInstructions = Boolean(
     (template.business_problem && String(template.business_problem).trim())
     || (inst.overview && String(inst.overview).trim())
     || steps.length
     || deliverables.length,
   );
+  const canSubmit = ['IN_PROGRESS', 'NEEDS_REVISION'].includes(assignment.status);
+  const isEvaluating = isAiEvaluationPending(assignment);
+  const summary = projectSummaryLine(template);
+
+  const sub = assignment.latest_submission;
+  const ev = sub?.evaluations?.[0];
+  const scoreNum = ev?.overall_score != null ? Math.round(Number(ev.overall_score)) : null;
+  const tags = ev ? getExtractedTags(sub, ev) : [];
+  const impBlock = ev ? formatImprovementsBlock(ev) : '';
 
   return (
-    <div className="student-task-expand student-task-expand--simple">
-      {template.short_description ? (
-        <p className="student-task-expand__lead">{template.short_description}</p>
-      ) : null}
+    <div className="project-modal-overlay" onClick={onClose}>
+      <div className="pmd-card" onClick={(e) => e.stopPropagation()}>
 
-      {assignment.recommendation_reason ? (
-        <div className="student-task-callout">
-          <span className="student-task-callout__label">Why we suggested this</span>
-          <p className="student-task-callout__text">{assignment.recommendation_reason}</p>
-        </div>
-      ) : null}
-
-      {(template.tags || []).length > 0 ? (
-        <div className="student-task-tags">
-          {(template.tags || []).slice(0, 10).map((tag) => (
-            <span key={tag} className="student-task-tag">{tag}</span>
-          ))}
-        </div>
-      ) : null}
-
-      {submissionReqs.length > 0 && (
-        <section className="student-task-requirements" aria-labelledby="handin-heading">
-          <h3 id="handin-heading" className="student-task-requirements__title">What to hand in</h3>
-          <ul className="student-task-requirements__list">
-            {submissionReqs.map((line, idx) => (
-              <li key={idx} className="student-task-requirements__item">{friendlyRequirementLine(line)}</li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {hasMoreBrief && (
-        <details className="student-task-details">
-          <summary className="student-task-details__summary">Read full instructions</summary>
-          <div className="student-task-details__body">
-            {template.business_problem && String(template.business_problem).trim() ? (
-              <section className="student-task-block">
-                <h3 className="student-task-block__title">Background</h3>
-                <p className="student-task-block__text">{template.business_problem}</p>
-              </section>
-            ) : null}
-            {inst.overview && String(inst.overview).trim() ? (
-              <section className="student-task-block">
-                <h3 className="student-task-block__title">Overview</h3>
-                <p className="student-task-block__text">{inst.overview}</p>
-              </section>
-            ) : null}
-            {steps.length > 0 ? (
-              <section className="student-task-block">
-                <h3 className="student-task-block__title">Steps</h3>
-                <ol className="student-task-block__list student-task-block__list--ordered">
-                  {steps.map((line, idx) => (
-                    <li key={idx}>{String(line)}</li>
-                  ))}
-                </ol>
-              </section>
-            ) : null}
-            {deliverables.length > 0 ? (
-              <section className="student-task-block">
-                <h3 className="student-task-block__title">Deliverables</h3>
-                <ul className="student-task-block__list">
-                  {deliverables.map((line, idx) => (
-                    <li key={idx}>{String(line)}</li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
+        {/* Header */}
+        <div className="pmd-header">
+          <div className="pmd-header__text">
+            <h2 className="pmd-title">{template.title || 'Project'}</h2>
+            <p className="pmd-meta">{summary}</p>
           </div>
-        </details>
-      )}
-
-      <div className="student-task-meta-row">
-        <div>
-          <span className="student-task-meta-row__label">Last score</span>
-          <span className="student-task-meta-row__value">{assignment.latest_evaluation_score ?? '—'}</span>
+          <button type="button" className="pmd-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
-        <div>
-          <span className="student-task-meta-row__label">Skills to have first</span>
-          <span className="student-task-meta-row__value">
-            {(template.prerequisite_skills || []).join(', ') || '—'}
-          </span>
+
+        {/* Scrollable body */}
+        <div className="pmd-body">
+
+          {template.short_description ? (
+            <p className="pmd-description">{template.short_description}</p>
+          ) : null}
+
+          {submissionReqs.length > 0 && (
+            <section className="pmd-section">
+              <h3 className="pmd-section__title">What to submit</h3>
+              <ul className="pmd-req-list">
+                {submissionReqs.map((line, idx) => (
+                  <li key={idx} className="pmd-req-item">{friendlyRequirementLine(line)}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {hasInstructions && (
+            <details className="pmd-instructions">
+              <summary className="pmd-instructions__toggle">Read full instructions</summary>
+              <div className="pmd-instructions__body">
+                {template.business_problem && String(template.business_problem).trim() ? (
+                  <div className="pmd-block">
+                    <h4 className="pmd-block__title">Background</h4>
+                    <p className="pmd-block__text">{template.business_problem}</p>
+                  </div>
+                ) : null}
+                {inst.overview && String(inst.overview).trim() ? (
+                  <div className="pmd-block">
+                    <h4 className="pmd-block__title">Overview</h4>
+                    <p className="pmd-block__text">{inst.overview}</p>
+                  </div>
+                ) : null}
+                {steps.length > 0 ? (
+                  <div className="pmd-block">
+                    <h4 className="pmd-block__title">Steps</h4>
+                    <ol className="pmd-block__list pmd-block__list--ordered">
+                      {steps.map((line, idx) => <li key={idx}>{String(line)}</li>)}
+                    </ol>
+                  </div>
+                ) : null}
+                {deliverables.length > 0 ? (
+                  <div className="pmd-block">
+                    <h4 className="pmd-block__title">Deliverables</h4>
+                    <ul className="pmd-block__list">
+                      {deliverables.map((line, idx) => <li key={idx}>{String(line)}</li>)}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            </details>
+          )}
+
+          <div className="pmd-score-row">
+            <span className="pmd-score-label">Last score</span>
+            <span className="pmd-score-value">
+              {scoreNum != null && !Number.isNaN(scoreNum) ? `${scoreNum} / 100` : (assignment.latest_evaluation_score ?? '—')}
+            </span>
+          </div>
+
+          {isEvaluating && (
+            <div className="student-task-ai-evaluating" role="status" aria-live="polite">
+              <span className="student-task-ai-evaluating__dot" aria-hidden />
+              <span>🤖 AI Evaluator is analyzing your submission…</span>
+            </div>
+          )}
+
+          {ev && (
+            <div className="pmd-feedback">
+              <strong className="pmd-feedback__title">AI feedback</strong>
+              {ev.feedback_summary ? (
+                <p className="pmd-feedback__text">{ev.feedback_summary}</p>
+              ) : null}
+              {impBlock ? (
+                <>
+                  <strong className="pmd-feedback__title" style={{ display: 'block', marginTop: '0.5rem' }}>Improvements</strong>
+                  <p className="pmd-feedback__text">{impBlock}</p>
+                </>
+              ) : null}
+              {tags.length > 0 && (
+                <>
+                  <strong className="pmd-feedback__title" style={{ display: 'block', marginTop: '0.35rem' }}>Topics detected</strong>
+                  <div className="student-task-ai-tags">
+                    {tags.map((tag, idx) => (
+                      <span key={`${tag}-${idx}`} className="student-task-ai-tag">{tag}</span>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="pmd-footer">
+          <button type="button" className="btn-outline-small" onClick={onClose}>Close</button>
+          {canSubmit && (
+            <button
+              type="button"
+              className="btn-submit"
+              onClick={() => { onClose(); onOpenSubmit(assignment); }}
+              disabled={isEvaluating}
+              title={isEvaluating ? 'Wait for AI grading to finish.' : undefined}
+            >
+              {assignment.status === 'NEEDS_REVISION' ? 'Resubmit' : 'Submit'}
+            </button>
+          )}
         </div>
       </div>
-
-      {isAiEvaluationPending(assignment) && (
-        <div className="student-task-ai-evaluating" role="status" aria-live="polite">
-          <span className="student-task-ai-evaluating__dot" aria-hidden />
-          <span>🤖 AI Evaluator is analyzing your submission…</span>
-        </div>
-      )}
-
-      {assignment.latest_submission?.evaluations?.[0] && (
-        <div className="student-task-feedback">
-          <strong className="student-task-feedback__title">AI feedback</strong>
-          {(() => {
-            const sub = assignment.latest_submission;
-            const ev = sub.evaluations[0];
-            const scoreNum = ev.overall_score != null ? Math.round(Number(ev.overall_score)) : null;
-            const tags = getExtractedTags(sub, ev);
-            const impBlock = formatImprovementsBlock(ev);
-            return (
-              <>
-                {scoreNum != null && !Number.isNaN(scoreNum) && (
-                  <p className="student-task-ai-score">
-                    {scoreNum}
-                    <span> / 100</span>
-                  </p>
-                )}
-                {ev.feedback_summary ? (
-                  <p className="student-task-feedback__text">{ev.feedback_summary}</p>
-                ) : null}
-                {impBlock ? (
-                  <div>
-                    <span className="student-task-feedback__title" style={{ display: 'block', marginTop: '0.5rem' }}>Improvements</span>
-                    <p className="student-task-ai-improvements">{impBlock}</p>
-                  </div>
-                ) : null}
-                {tags.length > 0 && (
-                  <div>
-                    <span className="student-task-feedback__title" style={{ display: 'block', marginTop: '0.35rem' }}>Topics detected</span>
-                    <div className="student-task-ai-tags">
-                      {tags.map((tag, idx) => (
-                        <span key={`${tag}-${idx}`} className="student-task-ai-tag">{tag}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            );
-          })()}
-        </div>
-      )}
     </div>
   );
 }
 
-/** Simple vertical list of project cards (replaces dense table). */
-function TaskAssignmentList({
-  assignments,
-  expandedId,
-  onToggleRow,
-  onAccept,
-  onOpenSubmit,
-}) {
+/** Simple vertical list of project cards. Clicking a card opens the details popup. */
+function TaskAssignmentList({ assignments, onOpenDetails, onAccept, onOpenSubmit }) {
   if (assignments.length === 0) return null;
 
   return (
     <div className="student-task-list">
       {assignments.map((assignment) => {
         const template = assignment.project_template || {};
-        const expanded = expandedId === assignment.id;
         const summary = projectSummaryLine(template);
         return (
-          <article key={assignment.id} className={`student-task-card-simple${expanded ? ' is-open' : ''}`}>
+          <article
+            key={assignment.id}
+            className="student-task-card-simple"
+            onClick={() => onOpenDetails(assignment)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && onOpenDetails(assignment)}
+          >
             <div className="student-task-card-simple__head">
-              <button
-                type="button"
-                className="student-task-card-simple__toggle"
-                onClick={() => onToggleRow(assignment.id)}
-                aria-expanded={expanded}
-              >
-                <span className="student-task-card-simple__chev" aria-hidden>{expanded ? '▼' : '▶'}</span>
-                <span className="student-task-card-simple__titles">
-                  <span className="student-task-card-simple__name">{template.title || 'Project'}</span>
-                  <span className="student-task-card-simple__sub">{summary}</span>
-                </span>
-              </button>
-              <div className="student-task-card-simple__badges" onClick={(e) => e.stopPropagation()}>
+              <div className="student-task-card-simple__titles">
+                <span className="student-task-card-simple__name">{template.title || 'Project'}</span>
+                <span className="student-task-card-simple__sub">{summary}</span>
+              </div>
+              <div className="student-task-card-simple__right" onClick={(e) => e.stopPropagation()}>
                 <span className={`task-badge task-badge--soft ${statusBadgeClass(assignment.status)}`}>
                   {taskStatusLabel(assignment.status)}
                 </span>
+                {assignment.status === 'RECOMMENDED' && (
+                  <button type="button" className="btn-primary-green student-task-card-simple__btn" onClick={() => onAccept(assignment.id)}>
+                    Add to list
+                  </button>
+                )}
+                {assignment.status === 'SUBMITTED' && (
+                  <button type="button" className="btn-outline-primary student-task-card-simple__btn" disabled>
+                    Evaluating…
+                  </button>
+                )}
+                {['IN_PROGRESS', 'NEEDS_REVISION'].includes(assignment.status) && (
+                  <button
+                    type="button"
+                    className="btn-submit student-task-card-simple__btn"
+                    onClick={() => onOpenSubmit(assignment)}
+                    disabled={isAiEvaluationPending(assignment)}
+                    title={isAiEvaluationPending(assignment) ? 'Wait for AI grading to finish.' : undefined}
+                  >
+                    {assignment.status === 'NEEDS_REVISION' ? 'Resubmit' : 'Submit'}
+                  </button>
+                )}
               </div>
             </div>
-            <div className="student-task-card-simple__actions" onClick={(e) => e.stopPropagation()}>
-              {assignment.status === 'RECOMMENDED' && (
-                <button type="button" className="btn-primary-green student-task-card-simple__btn" onClick={() => onAccept(assignment.id)}>
-                  Add to my list
-                </button>
-              )}
-              {assignment.status === 'SUBMITTED' && (
-                <button type="button" className="btn-outline-primary student-task-card-simple__btn" disabled>
-                  🤖 AI Evaluator is analyzing…
-                </button>
-              )}
-              {['IN_PROGRESS', 'NEEDS_REVISION'].includes(assignment.status) && (
-                <button
-                  type="button"
-                  className="btn-primary student-task-card-simple__btn"
-                  onClick={() => onOpenSubmit(assignment)}
-                  disabled={isAiEvaluationPending(assignment)}
-                  title={isAiEvaluationPending(assignment) ? 'Wait for AI grading to finish before resubmitting.' : undefined}
-                >
-                  {assignment.status === 'NEEDS_REVISION' ? 'Hand in again' : 'Hand in work'}
-                </button>
-              )}
-            </div>
-            {expanded ? (
-              <div className="student-task-card-simple__body">
-                <TaskExpandedDetails assignment={assignment} />
-              </div>
-            ) : null}
           </article>
         );
       })}
@@ -289,7 +273,7 @@ export default function StudentTasksSection({ assessmentPassed, onStartAssessmen
   const [submissionTarget, setSubmissionTarget] = useState(null);
   const [submissionForm, setSubmissionForm] = useState(EMPTY_SUBMISSION_FORM);
   const [submitting, setSubmitting] = useState(false);
-  const [expandedAssignmentId, setExpandedAssignmentId] = useState(null);
+  const [detailsTarget, setDetailsTarget] = useState(null);
   const fileInputRef = useRef(null);
 
   const closeSubmitModal = useCallback(() => {
@@ -404,9 +388,8 @@ export default function StudentTasksSection({ assessmentPassed, onStartAssessmen
     refreshRecommendations().finally(() => setLoading(false));
   }, [assessmentPassed, refreshRecommendations]);
 
-  useEffect(() => {
-    setExpandedAssignmentId(null);
-  }, [activeTab]);
+  const openDetails = useCallback((assignment) => setDetailsTarget(assignment), []);
+  const closeDetails = useCallback(() => setDetailsTarget(null), []);
 
   const sortByAssignedAtDesc = (a, b) => {
     const ta = a.assigned_at ? new Date(a.assigned_at).getTime() : 0;
@@ -435,16 +418,11 @@ export default function StudentTasksSection({ assessmentPassed, onStartAssessmen
     return assignments.filter((item) => item.status === 'COMPLETED');
   }, [activeTab, assignments, recommendedFeeds]);
 
-  const toggleRow = useCallback((id) => {
-    setExpandedAssignmentId((prev) => (prev === id ? null : id));
-  }, []);
-
   const acceptProject = async (assignmentId) => {
     try {
       await studentApi.acceptProject(assignmentId);
       await loadAssignments();
       setActiveTab('active');
-      setExpandedAssignmentId(null);
     } catch (err) {
       setError(err.response?.data?.detail || err.message || 'Could not add this project.');
     }
@@ -496,7 +474,7 @@ export default function StudentTasksSection({ assessmentPassed, onStartAssessmen
       <div className="student-tasks-toolbar student-tasks-toolbar--simple">
         <div className="student-tasks-toolbar__text">
           <h1>Projects</h1>
-          <p className="section-desc">Tap a card to read the brief. Use <strong>Hand in work</strong> when you are ready.</p>
+          <p className="section-desc">Tap a card to read the brief. Use <strong>Submit</strong> when you are ready.</p>
         </div>
         <button
           type="button"
@@ -557,8 +535,7 @@ export default function StudentTasksSection({ assessmentPassed, onStartAssessmen
                 <p className="student-feed-section__hint">Based on your assessment and progress.</p>
                 <TaskAssignmentList
                   assignments={recommendedFeeds.contentBasedRows}
-                  expandedId={expandedAssignmentId}
-                  onToggleRow={toggleRow}
+                  onOpenDetails={openDetails}
                   onAccept={acceptProject}
                   onOpenSubmit={openSubmitModal}
                 />
@@ -570,8 +547,7 @@ export default function StudentTasksSection({ assessmentPassed, onStartAssessmen
                 <p className="student-feed-section__hint">Projects others at your stage often take next.</p>
                 <TaskAssignmentList
                   assignments={recommendedFeeds.collaborativeRows}
-                  expandedId={expandedAssignmentId}
-                  onToggleRow={toggleRow}
+                  onOpenDetails={openDetails}
                   onAccept={acceptProject}
                   onOpenSubmit={openSubmitModal}
                 />
@@ -581,17 +557,24 @@ export default function StudentTasksSection({ assessmentPassed, onStartAssessmen
         ) : (
           <TaskAssignmentList
             assignments={filteredAssignments}
-            expandedId={expandedAssignmentId}
-            onToggleRow={toggleRow}
+            onOpenDetails={openDetails}
             onAccept={acceptProject}
             onOpenSubmit={openSubmitModal}
           />
         )}
 
+      {detailsTarget && (
+        <ProjectDetailsModal
+          assignment={detailsTarget}
+          onClose={closeDetails}
+          onOpenSubmit={openSubmitModal}
+        />
+      )}
+
       {submissionTarget && (
         <div className="project-modal-overlay" onClick={closeSubmitModal}>
           <div className="project-modal-card project-modal-card--simple" onClick={(event) => event.stopPropagation()}>
-            <h2 className="project-modal-card__title">Hand in your work</h2>
+            <h2 className="project-modal-card__title">Submit your work</h2>
             <p className="project-modal-card__subtitle">{submissionTarget.project_template?.title}</p>
             <p className="project-modal-card__meta">
               {modalHandInLabel}

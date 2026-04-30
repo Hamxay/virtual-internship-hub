@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = 120
 MAX_FILE_BYTES = 500 * 1024
+MAX_TOTAL_FILES = 50
+MAX_TOTAL_BYTES = 500 * 1024
 
 DIR_BLACKLIST = frozenset(
     {
@@ -236,6 +238,9 @@ class UniversalRepositoryFlattener:
                 return f'(Repository archive download failed: {detail})'
 
             included_files: List[tuple[str, str]] = []
+            current_files = 0
+            current_bytes = 0
+            truncated = False
 
             with zipfile.ZipFile(zip_path, 'r') as archive:
                 for info in archive.infolist():
@@ -277,7 +282,15 @@ class UniversalRepositoryFlattener:
                             continue
                     if '\x00' in text:
                         continue
+                    text_bytes = len(data)
+                    next_file_count = current_files + 1
+                    next_total_bytes = current_bytes + text_bytes
+                    if next_total_bytes > MAX_TOTAL_BYTES or next_file_count > MAX_TOTAL_FILES:
+                        truncated = True
+                        break
                     included_files.append((str(rel).replace('\\', '/'), text))
+                    current_files = next_file_count
+                    current_bytes = next_total_bytes
 
             if not included_files:
                 return '(Repository archive contained no whitelisted source files under size limit.)'
@@ -288,6 +301,10 @@ class UniversalRepositoryFlattener:
             for rel_path, body in included_files:
                 blocks.append(f'===== FILE: {rel_path} =====\n')
                 blocks.append(body.rstrip() + '\n\n')
+            if truncated:
+                blocks.append(
+                    'WARNING: Repository truncated due to size limits to protect AI context window\n\n'
+                )
 
             return ''.join(blocks).strip()
         except Exception as exc:

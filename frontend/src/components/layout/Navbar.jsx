@@ -4,6 +4,18 @@ import { useAuth } from '../../context/AuthContext';
 import { useLiveNotifications } from '../../hooks/useLiveNotifications';
 import { BellIcon } from '../ui/Icons';
 
+function formatRelativeTime(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 /**
  * Bell + dropdown for FR10 notifications. Mount inside authenticated dashboards only.
  * Does not replace full nav chrome — only injects this block.
@@ -50,28 +62,37 @@ export default function Navbar() {
     navigate(path);
   };
 
+  const badgeLabel = unreadCount > 9 ? '9+' : String(unreadCount);
+
   return (
-    <div className="relative" ref={wrapRef}>
+    <div className="notif-bell-wrap" ref={wrapRef}>
       <button
         type="button"
-        className="relative rounded p-2 text-gray-600 hover:bg-gray-100"
+        className="notif-bell-btn"
         aria-label="Notifications"
         aria-expanded={dropdownOpen}
         onClick={() => setDropdownOpen((o) => !o)}
       >
-        <BellIcon className="h-5 w-5" />
+        <BellIcon className="notif-bell-icon" />
         {unreadCount > 0 ? (
-          <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" aria-hidden />
+          <span className="notif-badge" aria-hidden>
+            {badgeLabel}
+          </span>
         ) : null}
       </button>
 
       {dropdownOpen ? (
-        <div className="absolute right-0 z-50 mt-1 w-80 rounded border border-gray-200 bg-white text-left text-sm text-gray-900 shadow-md">
-          <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
-            <span className="font-medium text-gray-900">Notifications</span>
+        <div className="notif-dropdown">
+          <div className="notif-dropdown__header">
+            <div className="notif-dropdown__title-row">
+              <span className="notif-dropdown__title">Notifications</span>
+              {unreadCount > 0 ? (
+                <span className="notif-dropdown__count-chip">{unreadCount}</span>
+              ) : null}
+            </div>
             <button
               type="button"
-              className="text-xs text-gray-600 underline hover:text-gray-900"
+              className="notif-dropdown__mark-all"
               onClick={async () => {
                 try {
                   await markAllAsRead();
@@ -80,26 +101,41 @@ export default function Navbar() {
                 }
               }}
             >
-              Mark all as read
+              Mark all read
             </button>
           </div>
-          <div className="max-h-72 overflow-y-auto">
+
+          <div className="notif-dropdown__list">
             {notifications.length === 0 ? (
-              <p className="px-3 py-4 text-gray-500">No notifications yet.</p>
+              <div className="notif-empty">
+                <svg
+                  className="notif-empty__icon"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                  />
+                </svg>
+                <p className="notif-empty__msg">No notifications yet.</p>
+              </div>
             ) : (
               notifications.map((n) => (
                 <button
                   key={n.id}
                   type="button"
                   onClick={() => handleItemClick(n)}
-                  className={`block w-full border-b border-gray-50 px-3 py-2 text-left last:border-0 hover:bg-gray-50 ${
-                    !n.is_read ? 'bg-gray-50/80' : ''
-                  }`}
+                  className={`notif-item${!n.is_read ? ' notif-item--unread' : ''}`}
                 >
-                  <span className="text-gray-900">{n.message}</span>
+                  <span className="notif-item__msg">{n.message}</span>
                   {n.created_at ? (
-                    <span className="mt-0.5 block text-xs text-gray-400">
-                      {new Date(n.created_at).toLocaleString()}
+                    <span className="notif-item__time">
+                      {formatRelativeTime(n.created_at)}
                     </span>
                   ) : null}
                 </button>

@@ -1,5 +1,5 @@
 """
-Pre-AI checks before calling Gemini (FR4): Python syntax (CODE) and TF-IDF similarity.
+Pre-AI checks before calling LLM evaluation (FR4): Python syntax (CODE) and TF-IDF similarity.
 """
 from __future__ import annotations
 
@@ -104,3 +104,15 @@ def pre_ai_plagiarism_max_similarity_percent(submission, extract: SubmissionExtr
 
 def plagiarism_gatekeeper_triggers(similarity_percent: float) -> bool:
     return similarity_percent > PLAGIARISM_STOP_THRESHOLD_PERCENT
+
+
+EMPTY_CONTENT_MARKER = '(No extractable student content.)'
+
+
+def empty_content_gatekeeper(body: str) -> bool:
+    """
+    Return True when the student bundle contains no usable content.
+    Triggers before syntax/plagiarism checks to avoid pointless comparisons.
+    """
+    stripped = (body or '').strip()
+    return not stripped or stripped == EMPTY_CONTENT_MARKER
