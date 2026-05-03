@@ -64,6 +64,22 @@ function AppRoutes() {
           }
         />
         <Route
+          path="/admin/reports/curriculum"
+          element={
+            <ProtectedRoute allowedRoles={['ADMINISTRATOR']}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/reports/students"
+          element={
+            <ProtectedRoute allowedRoles={['ADMINISTRATOR']}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/dashboard"
           element={
             <ProtectedRoute>

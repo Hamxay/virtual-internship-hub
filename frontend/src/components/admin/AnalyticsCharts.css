@@ -10,6 +10,25 @@
   gap: 1rem;
 }
 
+.analytics-charts-kpis--with-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem 1.25rem;
+}
+
+.analytics-charts-kpi-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.analytics-cohort-filter {
+  flex: 0 0 auto;
+}
+
 .analytics-kpi-card {
   background: #fff;
   border: 1px solid #e5e7eb;
@@ -32,22 +51,6 @@
   font-size: 1.75rem;
   font-weight: 700;
   color: #111827;
-}
-
-.analytics-kpi-growth--positive {
-  color: #15803d;
-}
-
-.analytics-charts-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.25rem;
-}
-
-@media (min-width: 1024px) {
-  .analytics-charts-grid {
-    grid-template-columns: 1fr 1fr;
-  }
 }
 
 .analytics-chart-panel {

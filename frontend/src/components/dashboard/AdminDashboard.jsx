@@ -1,15 +1,17 @@
 /**
  * Admin Dashboard – FR8 (user/project/report management), FR10 (project templates & evaluation criteria).
- * Sections: Dashboard overview, Users (students/mentors only), Skill Assessments, Project Templates, Reports.
+ * Sections: Dashboard overview, Users (students/mentors only), Skill Assessments, Project Templates, Reports (routed).
  */
 import React, { useState, useEffect } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { adminApi } from '../../api/admin.api';
 import { getAdminAnalytics } from '../../api/reports.api';
 import { useDomains, invalidateDomainsCache } from '../../hooks/useDomains';
 import { buildDomainPayload, buildQuestionPayload } from '../../services/admin.service';
 import AdminProjectsSection from './AdminProjectsSection';
-import AdminReportsCommandCenter from '../../pages/admin/AdminDashboard';
+import CurriculumHealth from '../../pages/admin/CurriculumHealth';
+import StudentAnalytics from '../../pages/admin/StudentAnalytics';
 import {
   GraduationCapIcon,
   LayoutDashboardIcon,
@@ -24,6 +26,7 @@ import {
   ClockIcon,
   PencilIcon,
   TrashIcon,
+  TargetIcon,
 } from '../ui/Icons';
 import './Dashboard.css';
 
@@ -33,23 +36,45 @@ const BASE_NAV_ITEMS = [
   { id: 'assessments', label: 'Domain Questions', icon: FileTextIcon, superadminOnly: false },
   { id: 'domains', label: 'Domains', icon: FolderOpenIcon, superadminOnly: false },
   { id: 'projects', label: 'Project Templates', icon: FolderKanbanIcon, superadminOnly: false },
-  { id: 'reports', label: 'Reports & Analytics', icon: BarChartIcon, superadminOnly: false },
+];
+
+const REPORTS_SUBLINKS = [
+  { to: '/admin/reports/curriculum', label: 'Curriculum Health', icon: TargetIcon },
+  { to: '/admin/reports/students', label: 'Student Analytics', icon: UsersIcon },
 ];
 
 function AdminDashboard() {
   const { user, logout } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const isSuperadmin = Boolean(user?.is_superuser ?? user?.is_superadmin);
   const navItems = BASE_NAV_ITEMS.filter((item) => !item.superadminOnly || isSuperadmin);
   const [activeView, setActiveView] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  const onReportsRoute =
+    location.pathname === '/admin/reports/curriculum' ||
+    location.pathname === '/admin/reports/students';
+
   const handleLogout = async () => {
     await logout();
     window.location.href = '/';
   };
 
+  const goToMainSection = (viewId) => {
+    navigate('/admin/dashboard');
+    setActiveView(viewId);
+    setMobileMenuOpen(false);
+  };
+
   const renderContent = () => {
+    if (location.pathname === '/admin/reports/curriculum') {
+      return <CurriculumHealth />;
+    }
+    if (location.pathname === '/admin/reports/students') {
+      return <StudentAnalytics />;
+    }
     switch (activeView) {
       case 'dashboard':
         return <AdminDashboardHome />;
@@ -61,8 +86,6 @@ function AdminDashboard() {
         return <AdminDomainsSection onDomainsChanged={invalidateDomainsCache} />;
       case 'projects':
         return <AdminProjectsSection />;
-      case 'reports':
-        return <AdminReportsCommandCenter />;
       default:
         return <AdminDashboardHome />;
     }
@@ -117,15 +140,12 @@ function AdminDashboard() {
         <nav className="sidebar-nav">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activeView === item.id;
+            const isActive = !onReportsRoute && activeView === item.id;
             return (
               <button
                 key={item.id}
                 type="button"
-                onClick={() => {
-                  setActiveView(item.id);
-                  setMobileMenuOpen(false);
-                }}
+                onClick={() => goToMainSection(item.id)}
                 className={isActive ? 'active' : ''}
               >
                 <Icon className="w-5 h-5 shrink-0" />
@@ -133,6 +153,26 @@ function AdminDashboard() {
               </button>
             );
           })}
+          <div className="sidebar-nav-reports-group" role="group" aria-label="Reports and analytics">
+            <div className="sidebar-nav-reports-heading">
+              <BarChartIcon className="w-5 h-5 shrink-0" />
+              <span className="text">Reports & Analytics</span>
+            </div>
+            {REPORTS_SUBLINKS.map((link) => {
+              const SubIcon = link.icon;
+              return (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  className={({ isActive }) => `sidebar-nav-sublink${isActive ? ' active' : ''}`}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <SubIcon className="w-5 h-5 shrink-0" />
+                  <span className="text">{link.label}</span>
+                </NavLink>
+              );
+            })}
+          </div>
         </nav>
       </aside>
 
@@ -183,7 +223,6 @@ function AdminDashboardHome() {
   }, []);
 
   const kpis = analyticsData?.kpis ?? {};
-  const growth = analyticsData?.progress?.platform_average_growth ?? null;
 
   const val = (v) => (loading ? '…' : (v ?? '—'));
 
@@ -200,7 +239,6 @@ function AdminDashboardHome() {
     { id: 3, label: 'In progress', value: evalData.in_progress ?? 0 },
     { id: 4, label: 'Needs revision', value: evalData.needs_revision ?? 0 },
     { id: 5, label: 'Avg. completed score', value: evalData.average_completed_score != null ? `${evalData.average_completed_score}` : '—' },
-    { id: 6, label: 'Platform skill growth', value: growth != null ? `${growth > 0 ? '+' : ''}${growth}%` : '—' },
   ] : [];
 
   return (

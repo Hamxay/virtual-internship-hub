@@ -34,6 +34,61 @@ class StudentProfileSerializer(serializers.ModelSerializer):
                   'created_at', 'updated_at')
         read_only_fields = ('created_at', 'updated_at')
 
+
+class StudentProfileForMentorListSerializer(StudentProfileSerializer):
+    """
+    Student list row for mentors: adds domain-scoped progress metrics (prefetched on the view).
+    """
+
+    domain_average = serializers.SerializerMethodField()
+    projects_completed = serializers.SerializerMethodField()
+    is_at_risk = serializers.SerializerMethodField()
+
+    class Meta(StudentProfileSerializer.Meta):
+        fields = (*StudentProfileSerializer.Meta.fields, 'domain_average', 'projects_completed', 'is_at_risk')
+
+    def _completed_domain_assignments(self, obj):
+        user = getattr(obj, 'user', None)
+        if user is None:
+            return []
+        return getattr(user, '_prefetched_completed_domain_assignments', None) or []
+
+    def _mentor_domain_metrics(self, obj):
+        """Compute once per instance (serializer may call getters separately)."""
+        if hasattr(obj, '_mentor_coaching_metrics'):
+            return obj._mentor_coaching_metrics
+        if not self.context.get('mentor_domain_id'):
+            obj._mentor_coaching_metrics = (None, None, False)
+            return obj._mentor_coaching_metrics
+        assignments = self._completed_domain_assignments(obj)
+        count = len(assignments)
+        scores = []
+        for asn in assignments:
+            for sub in asn.submissions.all():
+                evals = list(sub.evaluations.all())
+                if not evals:
+                    continue
+                mean_score = sum(float(e.overall_score) for e in evals) / len(evals)
+                scores.append(mean_score)
+                break
+        avg = round(sum(scores) / len(scores), 2) if scores else None
+        at_risk = avg is not None and avg < 60.0
+        obj._mentor_coaching_metrics = (avg, count, at_risk)
+        return obj._mentor_coaching_metrics
+
+    def get_projects_completed(self, obj):
+        _, count, _ = self._mentor_domain_metrics(obj)
+        return count
+
+    def get_domain_average(self, obj):
+        avg, _, _ = self._mentor_domain_metrics(obj)
+        return avg
+
+    def get_is_at_risk(self, obj):
+        _, _, at_risk = self._mentor_domain_metrics(obj)
+        return at_risk
+
+
 class MentorProfileSerializer(serializers.ModelSerializer):
     expertise_domain = DomainSerializer(read_only=True)
     expertise_domain_id = serializers.PrimaryKeyRelatedField(

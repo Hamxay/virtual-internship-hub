@@ -11,6 +11,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import logout
 from django.core.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
+from django.db.models import Prefetch
+
+from projects.models import ProjectSubmission, StudentProjectAssignment, SubmissionEvaluation
 
 from .models import User, StudentProfile, MentorProfile, Domain, PendingRegistration
 from .serializers import (
@@ -20,6 +23,7 @@ from .serializers import (
     UserSerializer,
     CreateAdministratorSerializer,
     StudentProfileSerializer,
+    StudentProfileForMentorListSerializer,
     MentorProfileSerializer,
     DomainSerializer,
     SendPasswordResetOTPSerializer,
@@ -256,6 +260,19 @@ class StudentListView(generics.ListAPIView):
     serializer_class = StudentProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_serializer_class(self):
+        if self.request.user.is_mentor:
+            return StudentProfileForMentorListSerializer
+        return StudentProfileSerializer
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        if self.request.user.is_mentor:
+            mp = getattr(self.request.user, 'mentor_profile', None)
+            if mp and mp.expertise_domain_id:
+                ctx['mentor_domain_id'] = mp.expertise_domain_id
+        return ctx
+
     def get_queryset(self):
         user = self.request.user
         if user.is_administrator:
@@ -264,9 +281,35 @@ class StudentListView(generics.ListAPIView):
             profile = getattr(user, 'mentor_profile', None)
             if not profile or not profile.expertise_domain_id:
                 return StudentProfile.objects.none()
-            return StudentProfile.objects.filter(
-                target_domains=profile.expertise_domain
-            ).select_related('user').prefetch_related('target_domains').distinct()
+            domain_id = profile.expertise_domain_id
+            completed_in_domain = (
+                StudentProjectAssignment.objects.filter(
+                    status='COMPLETED',
+                    project_template__domain_id=domain_id,
+                )
+                .select_related('project_template', 'project_template__domain')
+                .prefetch_related(
+                    Prefetch(
+                        'submissions',
+                        queryset=ProjectSubmission.objects.prefetch_related(
+                            Prefetch('evaluations', queryset=SubmissionEvaluation.objects.all()),
+                        ).order_by('-submitted_at', '-id'),
+                    ),
+                )
+            )
+            return (
+                StudentProfile.objects.filter(target_domains=profile.expertise_domain)
+                .select_related('user')
+                .prefetch_related(
+                    'target_domains',
+                    Prefetch(
+                        'user__project_assignments',
+                        queryset=completed_in_domain,
+                        to_attr='_prefetched_completed_domain_assignments',
+                    ),
+                )
+                .distinct()
+            )
         return StudentProfile.objects.none()
 
 

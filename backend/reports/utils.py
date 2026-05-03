@@ -1,13 +1,13 @@
 """
-FR9 analytics: clustering and skill progression aggregates.
+FR9 analytics: domain-centric student scores and skill progression aggregates.
 """
+import csv
 from collections import defaultdict
+from io import StringIO
 
-import pandas as pd
 from django.db.models import Prefetch
-from sklearn.cluster import KMeans
 
-from accounts.models import User  # Custom user model (is_student via role)
+from accounts.models import Domain, User
 from assessments.models import StudentAssessmentAttempt
 from projects.models import (
     ProjectSubmission,
@@ -25,20 +25,19 @@ def _submission_mean_overall_score(submission):
     return sum(e.overall_score for e in evaluations) / len(evaluations)
 
 
-def _template_domain_keys(template):
-    tags = template.tags or []
-    if isinstance(tags, list) and tags:
-        return [str(t) for t in tags]
-    if template.domain_id:
-        return [template.domain.name]
-    return ['Unknown']
+def get_official_domain_names():
+    """Ordered list of all catalog Domain names (e.g. 31 official domains)."""
+    return list(Domain.objects.order_by('name').values_list('name', flat=True))
 
 
-def get_student_clusters():
+def get_student_domain_scores():
     """
-    Rows = students, columns = domain labels from project template tags (or domain name).
-    KMeans with 3 clusters when at least 3 students; else cluster 0 for all.
+    One object per student: scores keyed by official Domain.name only (from project template FK).
+    Domains with no completed scored work in that domain are JSON null (not 0).
+    overall_average is the mean of only non-null domain scores, or null if none.
     """
+    official = get_official_domain_names()
+    official_set = set(official)
     students = list(User.objects.filter(role='STUDENT').order_by('id'))
     if not students:
         return []
@@ -49,63 +48,53 @@ def get_student_clusters():
             assignment__status='COMPLETED',
             assignment__student_id__in=student_ids,
         )
-        .select_related('assignment__student', 'assignment__project_template__domain')
+        .select_related(
+            'assignment__student',
+            'assignment__project_template__domain',
+        )
         .prefetch_related(
             Prefetch('evaluations', queryset=SubmissionEvaluation.objects.all()),
         )
     )
 
-    # student_id -> domain_key -> list of scores (one per submission contribution)
+    # student_id -> domain_name -> list of submission mean scores
     scores_by_student_domain = defaultdict(lambda: defaultdict(list))
 
     for sub in submissions:
+        template = sub.assignment.project_template
+        if not template.domain_id:
+            continue
+        domain_name = template.domain.name
+        if domain_name not in official_set:
+            continue
         sid = sub.assignment.student_id
         score = _submission_mean_overall_score(sub)
         if score is None:
             continue
-        for key in _template_domain_keys(sub.assignment.project_template):
-            scores_by_student_domain[sid][key].append(score)
+        scores_by_student_domain[sid][domain_name].append(score)
 
-    # collapse lists to averages per (student, domain)
-    matrix = {}
-    all_domains = set()
-    for sid, domains in scores_by_student_domain.items():
-        matrix[sid] = {}
-        for d, vals in domains.items():
-            matrix[sid][d] = sum(vals) / len(vals)
-            all_domains.add(d)
-
-    if not all_domains:
-        return [
-            {'username': st.username, 'cluster': 0}
-            for st in students
-        ]
-
-    all_domains = sorted(all_domains)
-    rows = []
-    for st in students:
-        row = {'username': st.username}
-        for d in all_domains:
-            row[d] = matrix.get(st.id, {}).get(d)
-        rows.append(row)
-
-    df = pd.DataFrame(rows).set_index('username')
-    domain_cols = [c for c in df.columns if c != 'cluster']
-    df[domain_cols] = df[domain_cols].fillna(0)
-
-    feature_cols = [c for c in df.columns]
-    if len(df) >= 3:
-        km = KMeans(n_clusters=3, random_state=42, n_init='auto')
-        df['cluster'] = km.fit_predict(df[feature_cols].values)
-    else:
-        df['cluster'] = 0
+    matrix_avg = {}
+    for sid, doms in scores_by_student_domain.items():
+        matrix_avg[sid] = {}
+        for d_name, vals in doms.items():
+            matrix_avg[sid][d_name] = sum(vals) / len(vals)
 
     out = []
-    for _, series in df.reset_index().iterrows():
-        rec = {'username': str(series['username']), 'cluster': int(series['cluster'])}
-        for c in feature_cols:
-            rec[c] = float(series[c])
-        out.append(rec)
+    for st in students:
+        row = {'username': st.username, 'student_id': st.id}
+        active_vals = []
+        for d_name in official:
+            if st.id in matrix_avg and d_name in matrix_avg[st.id]:
+                v = round(matrix_avg[st.id][d_name], 2)
+                row[d_name] = v
+                active_vals.append(v)
+            else:
+                row[d_name] = None
+        if active_vals:
+            row['overall_average'] = round(sum(active_vals) / len(active_vals), 2)
+        else:
+            row['overall_average'] = None
+        out.append(row)
     return out
 
 
@@ -172,55 +161,64 @@ def _ordered_completed_assignment_scores(student_id):
     return per_assignment
 
 
-def calculate_skill_improvement():
-    """
-    Skill delta: baseline from first passing assessment vs mean project execution score.
-    """
-    student_ids = list(
-        User.objects.filter(role='STUDENT').values_list('id', flat=True)
-    )
-    growth_samples = []
-    baselines = []
-    project1_scores = []
-    project2_scores = []
-
-    for sid in student_ids:
-        baseline = _student_baseline_pct(sid)
-        if baseline is not None:
-            baselines.append(baseline)
-
-        execution = _student_execution_avg(sid)
-        if baseline is not None and execution is not None:
-            if baseline > 0:
-                growth_samples.append(100.0 * (execution - baseline) / baseline)
-            else:
-                growth_samples.append(0.0)
-
-        ordered = _ordered_completed_assignment_scores(sid)
-        if len(ordered) >= 1:
-            project1_scores.append(ordered[0])
-        if len(ordered) >= 2:
-            project2_scores.append(ordered[1])
-
-    platform_average_growth = (
-        int(round(sum(growth_samples) / len(growth_samples)))
-        if growth_samples
-        else 0
-    )
-
-    def _avg(seq):
-        return round(sum(seq) / len(seq), 2) if seq else 0.0
-
-    time_series = [
-        _avg(baselines),
-        _avg(project1_scores),
-        _avg(project2_scores),
-    ]
-
+def get_platform_kpis():
+    """Headline counts for the admin analytics dashboard."""
     return {
-        'platform_average_growth': platform_average_growth,
-        'time_series': time_series,
+        'total_students': User.objects.filter(role='STUDENT').count(),
+        'total_mentors': User.objects.filter(role='MENTOR').count(),
+        'total_projects': StudentProjectAssignment.objects.filter(status='COMPLETED').count(),
     }
+
+
+def build_audit_csv_text():
+    """
+    FR8 audit export: one row per submission evaluation (AI score + mentor review state).
+    """
+    buf = StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(
+        [
+            'Date',
+            'Student Username',
+            'Project Title',
+            'Domain',
+            'AI Score',
+            'Mentor Status',
+        ]
+    )
+    evaluations = (
+        SubmissionEvaluation.objects.select_related(
+            'submission__assignment__student',
+            'submission__assignment__project_template',
+            'submission__assignment__project_template__domain',
+        )
+        .order_by('-reviewed_at')
+        .iterator(chunk_size=500)
+    )
+    for ev in evaluations:
+        sub = ev.submission
+        asn = sub.assignment
+        student = asn.student
+        template = asn.project_template
+        domain_name = template.domain.name if template.domain_id else ''
+        reviewed = ev.reviewed_at.strftime('%Y-%m-%d %H:%M') if ev.reviewed_at else ''
+        if ev.is_human_reviewed:
+            status = 'Mentor reviewed'
+        elif ev.decision == 'NEEDS_MENTOR_REVIEW':
+            status = 'Needs mentor review'
+        else:
+            status = ev.get_decision_display()
+        writer.writerow(
+            [
+                reviewed,
+                student.username if student else '',
+                template.title if template else '',
+                domain_name,
+                f'{ev.overall_score:.2f}',
+                status,
+            ]
+        )
+    return buf.getvalue()
 
 
 def calculate_student_personal_progress(user):

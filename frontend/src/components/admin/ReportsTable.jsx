@@ -28,7 +28,7 @@ function parseCsvLine(line) {
   return out;
 }
 
-function parseAuditCsv(text) {
+export function parseAuditCsv(text) {
   const lines = text.trim().split(/\r?\n/).filter(Boolean);
   if (lines.length < 2) return [];
   const header = parseCsvLine(lines[0]).map((h) => h.trim());
@@ -57,32 +57,40 @@ function parseAuditCsv(text) {
   return rows;
 }
 
-export default function ReportsTable() {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+/** When `auditRows` is provided, the parent supplies data (no internal CSV fetch). */
+export default function ReportsTable({ auditRows, auditLoading, auditError }) {
+  const [internalRows, setInternalRows] = useState([]);
+  const [internalLoading, setInternalLoading] = useState(true);
+  const [internalError, setInternalError] = useState('');
   const [search, setSearch] = useState('');
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
 
+  const isControlled = auditRows !== undefined;
+
   useEffect(() => {
+    if (isControlled) return undefined;
     let cancelled = false;
     (async () => {
-      setLoading(true);
-      setError('');
+      setInternalLoading(true);
+      setInternalError('');
       try {
         const text = await fetchAuditCsvText();
-        if (!cancelled) setRows(parseAuditCsv(text));
+        if (!cancelled) setInternalRows(parseAuditCsv(text));
       } catch (e) {
-        if (!cancelled) setError(e?.message || 'Failed to load audit data.');
+        if (!cancelled) setInternalError(e?.message || 'Failed to load audit data.');
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setInternalLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isControlled]);
+
+  const rows = isControlled ? auditRows : internalRows;
+  const loading = isControlled ? Boolean(auditLoading) : internalLoading;
+  const loadError = isControlled ? auditError || '' : internalError;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -124,6 +132,9 @@ export default function ReportsTable() {
             autoComplete="off"
           />
         </label>
+      </div>
+
+      <div className="reports-table-export-row">
         <button
           type="button"
           className="reports-table-export-btn"
@@ -134,7 +145,7 @@ export default function ReportsTable() {
         </button>
       </div>
 
-      {error && <p className="reports-table-error">{error}</p>}
+      {loadError && <p className="reports-table-error">{loadError}</p>}
       {exportError && <p className="reports-table-error">{exportError}</p>}
 
       {loading ? (

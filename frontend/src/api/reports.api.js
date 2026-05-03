@@ -3,7 +3,7 @@ import { client } from './client';
 const ADMIN_REPORTS_BASE = 'admin/reports';
 
 /**
- * FR9 admin analytics (KPIs, clusters, skill progress).
+ * FR9 admin analytics (KPIs and official-domain student matrix).
  * @returns {Promise<import('axios').AxiosResponse['data']>}
  */
 export async function getAdminAnalytics() {
