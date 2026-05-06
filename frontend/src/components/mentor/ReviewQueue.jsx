@@ -22,25 +22,35 @@ function TriageBadge({ score }) {
   if (score < 60) {
     return (
       <span className="mt-1 inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-800 ring-1 ring-red-200">
-        AI: Low score
+        Needs help
       </span>
     );
   }
   if (score > 80) {
     return (
       <span className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800 ring-1 ring-emerald-200">
-        AI: Looks good
+        Strong work
       </span>
     );
   }
   return (
     <span className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900 ring-1 ring-amber-200">
-      AI: Moderate
+      Keep watch
     </span>
   );
 }
 
-export default function ReviewQueue() {
+function parseReviewHint(message) {
+  const raw = String(message || '');
+  const match = raw.match(/^(.*?) submitted "(.*?)" for review\.?$/i);
+  if (!match) return { student: '', project: '' };
+  return {
+    student: (match[1] || '').trim().toLowerCase(),
+    project: (match[2] || '').trim().toLowerCase(),
+  };
+}
+
+export default function ReviewQueue({ notificationHint = '' }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -78,6 +88,24 @@ export default function ReviewQueue() {
   }, [selectedId]);
 
   useEffect(() => {
+    if (!notificationHint || !rows.length) return;
+    const { student, project } = parseReviewHint(notificationHint);
+    if (!project && !student) return;
+    const match = rows.find((row) => {
+      const title = String(row?.assignment?.project_template?.title || '').trim().toLowerCase();
+      const name = String(row?.assignment?.student?.username || row?.assignment?.student?.email || '')
+        .trim()
+        .toLowerCase();
+      const projectMatch = project ? title.includes(project) : true;
+      const studentMatch = student ? name.includes(student) : true;
+      return projectMatch && studentMatch;
+    });
+    if (match?.id) {
+      setSelectedId(match.id);
+    }
+  }, [notificationHint, rows]);
+
+  useEffect(() => {
     if (!toast) return undefined;
     const t = window.setTimeout(() => setToast(null), 4000);
     return () => window.clearTimeout(t);
@@ -110,16 +138,16 @@ export default function ReviewQueue() {
   };
 
   return (
-    <div className="flex min-h-[32rem] flex-col">
+    <div className="flex min-h-[32rem] flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-slate-600">
-          AI-triaged items in your expertise domain. Select a row to review details.
+          Student work waiting for your feedback. Pick one item to review.
         </p>
         <button
           type="button"
           onClick={loadQueue}
           disabled={loading}
-          className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-60"
+          className="inline-flex items-center rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-100 disabled:opacity-60"
         >
           {loading ? 'Refreshing…' : 'Refresh'}
         </button>
@@ -132,20 +160,20 @@ export default function ReviewQueue() {
       ) : null}
 
       {loading && rows.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white py-20 text-slate-500">
+        <div className="flex flex-1 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 py-20 text-slate-500">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-600" />
           <span className="ml-3 text-sm font-medium">Loading queue…</span>
         </div>
       ) : rows.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/80 py-16 text-center">
           <p className="text-sm font-medium text-slate-700">You&apos;re all caught up</p>
-          <p className="mt-1 max-w-sm text-xs text-slate-500">No submissions need mentor review in your domain right now.</p>
+          <p className="mt-1 max-w-sm text-xs text-slate-500">No student submissions are waiting for review right now.</p>
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 gap-4 lg:gap-6">
-          <aside className="flex w-full max-w-full shrink-0 flex-col rounded-xl border border-slate-200 bg-white shadow-sm lg:w-80">
+          <aside className="flex w-full max-w-full shrink-0 flex-col rounded-xl border border-slate-200 bg-slate-50 shadow-sm lg:w-96">
             <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Needs review</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Waiting for feedback</span>
               <span className="rounded-full bg-slate-900 px-2 py-0.5 text-xs font-semibold text-white">{rows.length}</span>
             </div>
             <ul className="max-h-[70vh] flex-1 overflow-y-auto p-2">
@@ -166,8 +194,8 @@ export default function ReviewQueue() {
                           : 'border-transparent bg-white hover:border-slate-200 hover:bg-slate-50'
                       }`}
                     >
-                      <div className="text-sm font-semibold leading-snug text-slate-900 line-clamp-2">{title}</div>
-                      <div className="mt-0.5 text-xs text-slate-600">{name}</div>
+                      <div className="text-base font-semibold leading-snug text-slate-900 line-clamp-2">{title}</div>
+                      <div className="mt-0.5 text-sm text-slate-600">{name}</div>
                       <TriageBadge score={score} />
                     </button>
                   </li>

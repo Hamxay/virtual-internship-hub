@@ -115,7 +115,7 @@ export function useLiveNotifications({ enabled }) {
   const markAsRead = useCallback(async (id) => {
     try {
       await markAsReadApi(id);
-      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
       setUnreadCount((c) => Math.max(0, c - 1));
     } catch {
       /* ignore */
@@ -124,7 +124,7 @@ export function useLiveNotifications({ enabled }) {
 
   const markAllAsRead = useCallback(async () => {
     await markAllAsReadApi();
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    setNotifications([]);
     setUnreadCount(0);
   }, []);
 

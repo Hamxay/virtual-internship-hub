@@ -237,76 +237,7 @@ class UniversalRepositoryFlattener:
                 detail = str(last_error) if last_error else 'HTTP error'
                 return f'(Repository archive download failed: {detail})'
 
-            included_files: List[tuple[str, str]] = []
-            current_files = 0
-            current_bytes = 0
-            truncated = False
-
-            with zipfile.ZipFile(zip_path, 'r') as archive:
-                for info in archive.infolist():
-                    name = info.filename
-                    if not name or name.endswith('/'):
-                        continue
-                    try:
-                        decoded = name.encode('cp437').decode('utf-8')
-                    except (UnicodeDecodeError, UnicodeEncodeError):
-                        decoded = name
-                    decoded = unquote(decoded)
-                    if not _is_safe_zip_member(decoded):
-                        continue
-                    parts = decoded.split('/', 1)
-                    inner = parts[1] if len(parts) > 1 else parts[0]
-                    rel = Path(inner)
-                    if _path_has_blacklisted_dir(rel):
-                        continue
-                    suffix = rel.suffix.lower()
-                    base = rel.name.lower()
-                    allowed = suffix in EXT_WHITELIST or base in EXT_WHITELIST
-                    if not allowed:
-                        continue
-                    if info.file_size > MAX_FILE_BYTES:
-                        logger.debug('Skipping oversized file %s (%s bytes)', decoded, info.file_size)
-                        continue
-                    try:
-                        data = archive.read(info)
-                    except (zipfile.BadZipFile, RuntimeError, ValueError) as exc:
-                        logger.warning('Skipping unreadable zip member %s: %s', decoded, exc)
-                        continue
-                    try:
-                        text = data.decode('utf-8')
-                    except UnicodeDecodeError:
-                        try:
-                            text = data.decode('latin-1')
-                        except UnicodeDecodeError:
-                            logger.debug('Skipping binary-looking file %s', decoded)
-                            continue
-                    if '\x00' in text:
-                        continue
-                    text_bytes = len(data)
-                    next_file_count = current_files + 1
-                    next_total_bytes = current_bytes + text_bytes
-                    if next_total_bytes > MAX_TOTAL_BYTES or next_file_count > MAX_TOTAL_FILES:
-                        truncated = True
-                        break
-                    included_files.append((str(rel).replace('\\', '/'), text))
-                    current_files = next_file_count
-                    current_bytes = next_total_bytes
-
-            if not included_files:
-                return '(Repository archive contained no whitelisted source files under size limit.)'
-
-            included_files.sort(key=lambda x: x[0])
-            tree_lines = self._build_tree_lines(path for path, _ in included_files)
-            blocks: List[str] = ['## Directory tree (filtered)\n', *tree_lines, '\n']
-            for rel_path, body in included_files:
-                blocks.append(f'===== FILE: {rel_path} =====\n')
-                blocks.append(body.rstrip() + '\n\n')
-            if truncated:
-                blocks.append(
-                    'WARNING: Repository truncated due to size limits to protect AI context window\n\n'
-                )
-
-            return ''.join(blocks).strip()
+            return self._flatten_zip_file(zip_path)
         except Exception as exc:
             logger.exception('UniversalRepositoryFlattener failed: %s', exc)
             return f'(Repository flattening failed: {exc})'
@@ -321,6 +252,89 @@ class UniversalRepositoryFlattener:
                     os.unlink(zip_path)
                 except OSError as exc:
                     logger.warning('Could not remove temp zip %s: %s', zip_path, exc)
+
+    def flatten_local_zip(self, zip_path: str) -> str:
+        """Flatten a locally uploaded ZIP file into filtered source text."""
+        path = Path(zip_path)
+        if not path.is_file():
+            return f'(Local ZIP not found: {zip_path})'
+        try:
+            return self._flatten_zip_file(str(path))
+        except Exception as exc:
+            logger.exception('Local ZIP flatten failed: %s', exc)
+            return f'(Local ZIP flatten failed: {exc})'
+
+    def _flatten_zip_file(self, zip_path: str) -> str:
+        included_files: List[tuple[str, str]] = []
+        current_files = 0
+        current_bytes = 0
+        truncated = False
+
+        with zipfile.ZipFile(zip_path, 'r') as archive:
+            for info in archive.infolist():
+                name = info.filename
+                if not name or name.endswith('/'):
+                    continue
+                try:
+                    decoded = name.encode('cp437').decode('utf-8')
+                except (UnicodeDecodeError, UnicodeEncodeError):
+                    decoded = name
+                decoded = unquote(decoded)
+                if not _is_safe_zip_member(decoded):
+                    continue
+                parts = decoded.split('/', 1)
+                inner = parts[1] if len(parts) > 1 else parts[0]
+                rel = Path(inner)
+                if _path_has_blacklisted_dir(rel):
+                    continue
+                suffix = rel.suffix.lower()
+                base = rel.name.lower()
+                allowed = suffix in EXT_WHITELIST or base in EXT_WHITELIST
+                if not allowed:
+                    continue
+                if info.file_size > MAX_FILE_BYTES:
+                    logger.debug('Skipping oversized file %s (%s bytes)', decoded, info.file_size)
+                    continue
+                try:
+                    data = archive.read(info)
+                except (zipfile.BadZipFile, RuntimeError, ValueError) as exc:
+                    logger.warning('Skipping unreadable zip member %s: %s', decoded, exc)
+                    continue
+                try:
+                    text = data.decode('utf-8')
+                except UnicodeDecodeError:
+                    try:
+                        text = data.decode('latin-1')
+                    except UnicodeDecodeError:
+                        logger.debug('Skipping binary-looking file %s', decoded)
+                        continue
+                if '\x00' in text:
+                    continue
+                text_bytes = len(data)
+                next_file_count = current_files + 1
+                next_total_bytes = current_bytes + text_bytes
+                if next_total_bytes > MAX_TOTAL_BYTES or next_file_count > MAX_TOTAL_FILES:
+                    truncated = True
+                    break
+                included_files.append((str(rel).replace('\\', '/'), text))
+                current_files = next_file_count
+                current_bytes = next_total_bytes
+
+        if not included_files:
+            return '(Repository archive contained no whitelisted source files under size limit.)'
+
+        included_files.sort(key=lambda x: x[0])
+        tree_lines = self._build_tree_lines(path for path, _ in included_files)
+        blocks: List[str] = ['## Directory tree (filtered)\n', *tree_lines, '\n']
+        for rel_path, body in included_files:
+            blocks.append(f'===== FILE: {rel_path} =====\n')
+            blocks.append(body.rstrip() + '\n\n')
+        if truncated:
+            blocks.append(
+                'WARNING: Repository truncated due to size limits to protect AI context window\n\n'
+            )
+
+        return ''.join(blocks).strip()
 
     def _build_tree_lines(self, paths: Iterable[str]) -> List[str]:
         """Minimal tree from sorted posix paths."""

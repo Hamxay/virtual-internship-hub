@@ -1,51 +1,52 @@
-Username,Email, Password
-jsmith2026,j.smith2026@gmail.com,Blue#Sky88!
-mgarcia_99,m.garcia99@gmail.com,Paper*Clip21
-lchen_bio,l.chen.bio@gmail.com,Green$Leaf44
-awilliams_x,a.williams.x@gmail.com,Echo_Base09
-rpatel_med,r.patel.med@gmail.com,Hidden%Path7
-ktaylor_art,k.taylor.art@gmail.com,Bright@Sun12
-s_miller88,s.miller88@gmail.com,Swift&River5
-d_brown_edu,d.brown.edu@gmail.com,Calm#Ocean22
-i_jones_lit,i.jones.lit@gmail.com,Brave*Lion33
-n_davis_sci,n.davis.sci@gmail.com,Silver_Moon1
-o_wilson_92,o.wilson92@gmail.com,Golden$Key77
-p_moore_hist,p.moore.hist@gmail.com,Forest%Walk9
-q_taylor_01,q.taylor01@gmail.com,Urban@Life04
-h_anderson7,h.anderson7@gmail.com,Winter&Cold1
-z_thomas_v,z.thomas.v@gmail.com,Summer#Heat6
-v_jackson_z,v.jackson.z@gmail.com,Spring*Rain2
-x_white_77,x.white77@gmail.com,Autumn_Leaf8
-b_harris_05,b.harris05@gmail.com,Desert$Sand3
-c_martin_91,c.martin91@gmail.com,Mountain%Hi2
-f_thompson_x,f.thompson.x@gmail.com,Valley@Low55
-g_garcia_33,g.garcia33@gmail.com,Rapid&Fire90
-j_martinez_8,j.martinez8@gmail.com,Steady#Hand4
-k_robinson_2,k.robinson2@gmail.com,Mighty*Oak11
-l_clark_09,l.clark09@gmail.com,Clear_View66
-m_rodriguez_1,m.rodriguez1@gmail.com,Sharp$Mind82
-n_lewis_71,n.lewis71@gmail.com,Quick%Step19
-r_lee_math,r.lee.math@gmail.com,Logic@Gate33
-s_walker_phd,s.walker.phd@gmail.com,Deep&Blue101
-t_hall_9,t.hall9@gmail.com,North#Star54
-u_allen_8,u.allen8@gmail.com,South#Wind22
-w_young_02,w.young02@gmail.com,East*Gate76
-y_king_7,y.king7@gmail.com,West_Side31
-a_wright_88,a.wright88@gmail.com,Solid$Rock00
-e_lopez_sci,e.lopez.sci@gmail.com,Liquid%Flow9
-i_hill_3,i.hill3@gmail.com,Plasma@Gas12
-o_scott_7,o.scott7@gmail.com,Frozen&Ice44
-u_green_0,u.green0@gmail.com,Iron#Clad55
-j_adams_hist,j.adams.hist@gmail.com,Copper*Wire1
-k_baker_9,k.baker9@gmail.com,Bronze_Medal
-l_gonzalez_2,l.gonzalez2@gmail.com,Silver$Coin8
-m_nelson_v,m.nelson.v@gmail.com,Gold%Bar9910
-n_carter_9,n.carter9@gmail.com,Ruby@Stone43
-o_mitchell_1,o.mitchell1@gmail.com,Opal&Gem0211
-p_perez_bio,p.perez.bio@gmail.com,Pearl#Neck12
-q_roberts_7,q.roberts7@gmail.com,Jade*Ring777
-r_turner_lit,r.turner.lit@gmail.com,Onyx_Dark888
-s_phillips_0,s.phillips0@gmail.com,Amber$Glow55
-t_campbell_9,t.campbell9@gmail.com,Quartz%Time4
-u_parker_sci,u.parker.sci@gmail.com,Topaz@Sun222
-v_evans_88,v.evans88@gmail.com,Flint&Steel9
+Name,Email,Password,Domain1,Domain2,Domain3
+Ali,ali@gmail.com,Ali1234@,Digital Marketing,Affiliate Marketing,
+Hassan Malik,hassan@gmail.com,Hassan1234@,Web Development,Frontend Development,UI/UX Design
+Fatima Khan,fatima@gmail.com,Fatima1234@,Data Analytics,Digital Marketing,
+Ayesha Siddiqui,ayesha@gmail.com,Ayesha1234@,Graphic Design,UI/UX Design,Creative Writing
+Bilal Ahmed,bilal@gmail.com,Bilal1234@,Python Programming,Data Analytics,
+Zainab Hussain,zainab@gmail.com,Zainab1234@,WordPress,SEO,Digital Marketing
+Usman Sheikh,usman@gmail.com,Usman1234@,Backend Development,Database Management,
+Maryam Raza,maryam@gmail.com,Maryam1234@,Affiliate Marketing,E-Commerce Management,Freelancing
+Omar Farooq,omar@gmail.com,Omar1234@,React Development,JavaScript Development,
+Sana Javed,sana@gmail.com,Sana1234@,Creative Writing,Digital Marketing,Communication & Soft Skills
+Imran Qureshi,imran@gmail.com,Imran1234@,Cloud Computing,DevOps,
+Hira Nadeem,hira@gmail.com,Hira1234@,Graphic Design,Video Editing,UI/UX Design
+Tariq Mahmood,tariq@gmail.com,Tariq1234@,Web Development,PHP Development,
+Nida Akhtar,nida@gmail.com,Nida1234@,Data Analytics,QuickBooks,Digital Literacy
+Faisal Iqbal,faisal@gmail.com,Faisal1234@,JavaScript Development,Frontend Development,
+Rubina Yasmin,rubina@gmail.com,Rubina1234@,Digital Marketing,Affiliate Marketing,E-Commerce Management
+Kamran Ali,kamran@gmail.com,Kamran1234@,Python Programming,Backend Development,
+Shazia Parveen,shazia@gmail.com,Shazia1234@,UI/UX Design,Graphic Design,Creative Writing
+Waseem Haider,waseem@gmail.com,Waseem1234@,SEO,WordPress,
+Amna Tariq,amna@gmail.com,Amna1234@,Communication & Soft Skills,Freelancing,Creative Writing
+Danish Saleem,danish@gmail.com,Danish1234@,Web Development,JavaScript Development,
+Sadia Malik,sadia@gmail.com,Sadia1234@,Data Analytics,Machine Learning / AI,Python Programming
+Rehan Khan,rehan@gmail.com,Rehan1234@,Digital Marketing,Affiliate Marketing,
+Mehwish Awan,mehwish@gmail.com,Mehwish1234@,Graphic Design,UI/UX Design,Video Editing
+Adnan Bashir,adnan@gmail.com,Adnan1234@,Cloud Computing,DevOps,
+Lubna Rafiq,lubna@gmail.com,Lubna1234@,WordPress,Web Development,SEO
+Yasir Jamil,yasir@gmail.com,Yasir1234@,React Development,Frontend Development,
+Saima Khalid,saima@gmail.com,Saima1234@,QuickBooks,Data Analytics,Digital Literacy
+Noman Shah,noman@gmail.com,Noman1234@,Backend Development,Node.js Development,
+Hina Aslam,hina@gmail.com,Hina1234@,Creative Writing,Communication & Soft Skills,Digital Marketing
+Zeeshan Mirza,zeeshan@gmail.com,Zeeshan1234@,Cybersecurity,Cloud Computing,
+Farah Lodhi,farah@gmail.com,Farah1234@,UI/UX Design,Graphic Design,Digital Marketing
+Asadullah Khan,asadullah@gmail.com,Asadullah1234@,Python Programming,Machine Learning / AI,
+Noreen Bukhari,noreen@gmail.com,Noreen1234@,Affiliate Marketing,E-Commerce Management,Freelancing
+Shahid Latif,shahid@gmail.com,Shahid1234@,Java Programming,Software Engineering,
+Rabia Noor,rabia@gmail.com,Rabia1234@,Video Editing,Graphic Design,Creative Writing
+Junaid Akram,junaid@gmail.com,Junaid1234@,Web Development,React Development,
+Kiran Aziz,kiran@gmail.com,Kiran1234@,Digital Marketing,SEO,WordPress
+Salman Tariq,salman@gmail.com,Salman1234@,Backend Development,Node.js Development,
+Uzma Hanif,uzma@gmail.com,Uzma1234@,Data Analytics,QuickBooks,Communication & Soft Skills
+Hamza Siddiqui,hamza@gmail.com,Hamza1234@,Frontend Development,JavaScript Development,React Development
+Saba Irfan,saba@gmail.com,Saba1234@,Creative Writing,Digital Literacy,Communication & Soft Skills
+Moiz Rehman,moiz@gmail.com,Moiz1234@,Software Engineering,DevOps,
+Tahira Bashir,tahira@gmail.com,Tahira1234@,UI/UX Design,Graphic Design,Video Editing
+Arsalan Butt,arsalan@gmail.com,Arsalan1234@,Python Programming,Backend Development,
+Madiha Zafar,madiha@gmail.com,Madiha1234@,Affiliate Marketing,Digital Marketing,E-Commerce Management
+Fahad Chaudhry,fahad@gmail.com,Fahad1234@,Database Management,Backend Development,
+Samina Gul,samina@gmail.com,Samina1234@,SEO,WordPress,Digital Marketing
+Rizwan Ashraf,rizwan@gmail.com,Rizwan1234@,Data Analytics,Python Programming,
+Amina Sohail,amina@gmail.com,Amina1234@,Graphic Design,UI/UX Design,Creative Writing
+Babar Ilyas,babar@gmail.com,Babar1234@,Cloud Computing,Cybersecurity,DevOps

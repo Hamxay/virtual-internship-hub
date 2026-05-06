@@ -12,6 +12,7 @@ import csv
 import json
 import random
 import re
+from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
@@ -20,7 +21,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from accounts.models import Domain
+from accounts.models import Domain, MentorProfile
 from assessments.models import StudentAssessmentAttempt
 from projects.models import (
     ProjectSubmission,
@@ -61,6 +62,21 @@ def _find_student_data_file(explicit: str | None) -> Path:
     )
 
 
+def _find_mentor_data_file() -> Path | None:
+    base = Path(settings.BASE_DIR).resolve()
+    here = Path(__file__).resolve()
+    projects_dir = here.parents[2]  # .../projects
+    candidates = [
+        projects_dir / "data" / "mentor_data.csv",
+        base / "mentor_data.csv",
+        base / "projects" / "data" / "mentor_data.csv",
+    ]
+    for c in candidates:
+        if c.is_file():
+            return c
+    return None
+
+
 def _normalize_row_keys(row: dict) -> dict[str, str]:
     """Map common header variants to name, email, password."""
     out = {}
@@ -84,6 +100,27 @@ def _normalize_row_keys(row: dict) -> dict[str, str]:
     email = out.get("email") or out.get("e-mail") or ""
     password = out.get("password") or out.get("pass") or ""
     return {"name": name, "email": email, "password": password}
+    # NOTE: extra CSV keys are preserved in `out` for downstream domain parsing.
+
+
+def _normalize_row(row: dict) -> dict[str, str]:
+    """
+    Normalize common account fields but also keep any domain columns.
+    """
+    out = {}
+    for k, v in row.items():
+        if k is None:
+            continue
+        key = str(k).strip().lower().replace(" ", "_")
+        val = (v or "").strip() if isinstance(v, str) else v
+        if val is None:
+            val = ""
+        if not isinstance(val, str):
+            val = str(val)
+        out[key] = val.strip()
+    base = _normalize_row_keys(row)
+    out.update(base)
+    return out
 
 
 def _parse_student_data(path: Path) -> list[dict[str, str]]:
@@ -101,7 +138,7 @@ def _parse_student_data(path: Path) -> list[dict[str, str]]:
         for item in data:
             if not isinstance(item, dict):
                 continue
-            rows.append(_normalize_row_keys({str(k): v for k, v in item.items()}))
+            rows.append(_normalize_row({str(k): v for k, v in item.items()}))
         return rows
 
     if suffix == ".py":
@@ -111,7 +148,7 @@ def _parse_student_data(path: Path) -> list[dict[str, str]]:
         rows = []
         for item in data:
             if isinstance(item, dict):
-                rows.append(_normalize_row_keys({str(k): v for k, v in item.items()}))
+                rows.append(_normalize_row({str(k): v for k, v in item.items()}))
         return rows
 
     # CSV (default / no extension)
@@ -120,7 +157,19 @@ def _parse_student_data(path: Path) -> list[dict[str, str]]:
         raise ValueError("CSV has no header row")
     rows = []
     for row in reader:
-        rows.append(_normalize_row_keys(row))
+        rows.append(_normalize_row(row))
+    return rows
+
+
+def _parse_mentor_data(path: Path) -> list[dict[str, str]]:
+    raw = path.read_text(encoding="utf-8").strip()
+    reader = csv.DictReader(raw.splitlines())
+    if not reader.fieldnames:
+        raise ValueError("mentor_data CSV has no header row")
+    rows = []
+    for row in reader:
+        norm = _normalize_row(row)
+        rows.append(norm)
     return rows
 
 
@@ -158,6 +207,44 @@ def _pick_target_domain_subset(all_domains: list[Domain], rng: random.Random) ->
         return list(all_domains)
     size = rng.choice([2, 3])
     return rng.sample(all_domains, size)
+
+
+def _extract_domains_from_student_row(row: dict, eligible_domains: list[Domain]) -> list[Domain]:
+    domain_by_name = {d.name.strip().lower(): d for d in eligible_domains}
+    raw_fields = [
+        row.get("domain"),
+        row.get("domain1"),
+        row.get("domain2"),
+        row.get("domain3"),
+        row.get("target_domain"),
+        row.get("target_domains"),
+        row.get("domains"),
+    ]
+    tokens = []
+    for field in raw_fields:
+        if not field:
+            continue
+        text = str(field).strip()
+        if not text:
+            continue
+        parts = re.split(r"[|,;/]+", text)
+        for p in parts:
+            t = p.strip()
+            if t:
+                tokens.append(t)
+    seen = set()
+    selected = []
+    for token in tokens:
+        d = domain_by_name.get(token.lower())
+        if d is None:
+            continue
+        if d.id in seen:
+            continue
+        seen.add(d.id)
+        selected.append(d)
+        if len(selected) == 3:
+            break
+    return selected
 
 
 def _random_domain_weights_uniform(targets: list[Domain], rng: random.Random) -> dict[str, float]:
@@ -260,6 +347,82 @@ def _dedupe_tags(tag_lists: list) -> list[str]:
     return out
 
 
+def _subsidiary_scores_from_overall(overall: float, rng: random.Random) -> tuple[float, float, float, float]:
+    """Keep rubric sub-scores near overall so seeded rows look coherent in reports."""
+
+    def clamp(x: float) -> float:
+        return round(max(0.0, min(100.0, x)), 2)
+
+    jitter = lambda: rng.uniform(-10.0, 10.0)
+    return (
+        clamp(overall + jitter()),
+        clamp(overall + jitter()),
+        clamp(overall + jitter()),
+        clamp(overall + jitter()),
+    )
+
+
+def _decision_and_feedback(overall: float) -> tuple[str, str]:
+    if overall >= 78.0:
+        return (
+            "ACCEPTED",
+            f"Accepted (seeded). Overall {overall:.1f}.",
+        )
+    if overall >= 45.0:
+        return (
+            "REVISE_AND_RESUBMIT",
+            f"Revise and resubmit (seeded). Overall {overall:.1f}.",
+        )
+    return (
+        "NEEDS_MENTOR_REVIEW",
+        f"Mentor review suggested (seeded). Overall {overall:.1f}.",
+    )
+
+
+def _ensure_mentors(all_domains: list[Domain], rng: random.Random, stdout):
+    mentor_file = _find_mentor_data_file()
+    rows = []
+    if mentor_file:
+        rows = _parse_mentor_data(mentor_file)
+        rows = [r for r in rows if r.get("email") and r.get("password")]
+        stdout.write(f"Using mentor data file: {mentor_file}")
+    else:
+        rows = []
+        for d in all_domains:
+            rows.append(
+                {
+                    "name": f"{d.name} Mentor",
+                    "email": f"mentor_{d.code.lower()}@seed.local",
+                    "password": "Mentor@123",
+                }
+            )
+        stdout.write("mentor_data.csv not found; generating one mentor per domain.")
+
+    used_usernames: set[str] = set()
+    for idx, row in enumerate(rows):
+        domain = all_domains[idx % len(all_domains)]
+        username = _username_from_row(row.get("name", ""), row["email"], used_usernames)
+        mentor_user, _ = User.objects.update_or_create(
+            email=row["email"].strip().lower(),
+            defaults={
+                "username": username,
+                "role": "MENTOR",
+                "is_email_verified": True,
+            },
+        )
+        mentor_user.set_password(row["password"])
+        mentor_user.save(update_fields=["password"])
+        MentorProfile.objects.update_or_create(
+            user=mentor_user,
+            defaults={
+                "professional_bio": "Seeded mentor profile for dashboard triage and review queue.",
+                "expertise_domain": domain,
+                "years_of_experience": rng.randint(3, 12),
+                "is_available": True,
+            },
+        )
+
+
 class Command(BaseCommand):
     help = (
         "Load students from student_data (CSV/JSON/list), replace existing non-superuser accounts "
@@ -295,6 +458,16 @@ class Command(BaseCommand):
         if not all_domains:
             self.stdout.write(self.style.ERROR("No Domain rows in DB; load domains first."))
             return
+        _ensure_mentors(all_domains, random.Random(), self.stdout)
+        mentor_profiles = list(
+            MentorProfile.objects.select_related('user', 'expertise_domain').filter(
+                expertise_domain__isnull=False,
+                user__role='MENTOR',
+            )
+        )
+        mentors_by_domain_id: dict[int, list] = {}
+        for mp in mentor_profiles:
+            mentors_by_domain_id.setdefault(mp.expertise_domain_id, []).append(mp.user)
 
         templates_by_domain: dict[int, list[ProjectTemplate]] = {}
         for d in all_domains:
@@ -302,6 +475,15 @@ class Command(BaseCommand):
                 ProjectTemplate.objects.filter(domain_id=d.pk, active=True).only("id", "domain_id", "tags")
             )
             templates_by_domain[d.pk] = qs
+        eligible_domains = [d for d in all_domains if len(templates_by_domain.get(d.pk, [])) >= 5]
+        if len(eligible_domains) < 2:
+            self.stdout.write(
+                self.style.ERROR(
+                    "Need at least 2 domains with >=5 active templates each to guarantee "
+                    "5 projects per assigned domain."
+                )
+            )
+            return
 
         used_usernames: set[str] = set()
         rng = random.Random()
@@ -325,7 +507,17 @@ class Command(BaseCommand):
                 user.student_profile.last_name = last
                 user.student_profile.save(update_fields=["first_name", "last_name"])
 
-            targets = _pick_target_domain_subset(all_domains, rng)
+            row_targets = _extract_domains_from_student_row(row, eligible_domains)
+            if len(row_targets) >= 2:
+                targets = row_targets[:3]
+            else:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"[{i}/{len(rows)}] {email}: missing/invalid domain columns; "
+                        "skipping student (no random domain fallback)."
+                    )
+                )
+                continue
             weights = _random_domain_weights_uniform(targets, rng)
             primary = _primary_from_weights(targets, weights)
             if hasattr(user, "student_profile"):
@@ -340,74 +532,91 @@ class Command(BaseCommand):
             snapshot.metadata = {}
             snapshot.save()
 
-            pool = templates_by_domain.get(primary.pk) or []
-            chosen: list[ProjectTemplate] = []
-            if len(pool) < 1:
-                self.stdout.write(
-                    self.style.WARNING(
-                        f"[{i}/{len(rows)}] {email}: no templates for domain {primary.name}; "
-                        "skipping assignments (assessment still seeded)."
-                    )
-                )
-            else:
-                n_pick = min(len(pool), rng.randint(2, 6))
-                chosen = rng.sample(pool, n_pick)
-
             scores: list[float] = []
             all_tags: list = []
+            for domain in targets:
+                pool = templates_by_domain.get(domain.pk) or []
+                chosen = rng.sample(pool, 5)
+                trajectory = rng.choice(["IMPROVING", "FAILING", "STABLE"])
 
-            for tpl in chosen:
-                overall = round(rng.uniform(0.0, 100.0), 2)
-                correctness = round(rng.uniform(0.0, 100.0), 2)
-                originality = round(rng.uniform(0.0, 100.0), 2)
-                grammar = round(rng.uniform(0.0, 100.0), 2)
-                design = round(rng.uniform(0.0, 100.0), 2)
-                scores.append(overall)
-
-                if overall >= 78.0:
-                    decision = "ACCEPTED"
-                    feedback_summary = f"Accepted (seeded). Overall {overall:.1f}."
-                elif overall >= 45.0:
-                    decision = "REVISE_AND_RESUBMIT"
-                    feedback_summary = f"Revise and resubmit (seeded). Overall {overall:.1f}."
+                if trajectory == "IMPROVING":
+                    starting_score = rng.randint(40, 55)
+                    trajectory_step = rng.randint(4, 8)
+                elif trajectory == "FAILING":
+                    starting_score = rng.randint(85, 95)
+                    trajectory_step = rng.randint(4, 8)
                 else:
-                    decision = "NEEDS_MENTOR_REVIEW"
-                    feedback_summary = f"Mentor review suggested (seeded). Overall {overall:.1f}."
+                    starting_score = rng.randint(75, 85)
+                    trajectory_step = 0
 
-                tags = tpl.tags if isinstance(tpl.tags, list) else []
-                all_tags.append(tags)
+                base_date = timezone.now() - timedelta(weeks=(len(targets) * 5) + 2)
 
-                assignment = StudentProjectAssignment.objects.create(
-                    student=user,
-                    project_template=tpl,
-                    status="COMPLETED",
-                    recommended_by="SEED",
-                    recommendation_reason="Generated by generate_student_history",
-                    latest_evaluation_score=overall,
-                    latest_feedback_summary=feedback_summary,
-                    completed_at=timezone.now(),
-                )
-                submission = ProjectSubmission.objects.create(
-                    assignment=assignment,
-                    version=1,
-                    submission_text=f"Seeded submission for {tpl.title}.",
-                    status="EVALUATED",
-                )
-                SubmissionEvaluation.objects.create(
-                    submission=submission,
-                    overall_score=overall,
-                    correctness_score=correctness,
-                    originality_score=originality,
-                    grammar_score=grammar,
-                    design_quality_score=design,
-                    decision=decision,
-                    feedback_summary=feedback_summary,
-                    rubric_scores={},
-                    strengths=["Seeded completion"],
-                    improvements=[],
-                    flags=[],
-                    evaluation_payload={"seeded": True},
-                )
+                for idx, tpl in enumerate(chosen):
+                    if trajectory == "IMPROVING":
+                        current_score = float(min(100, starting_score + (idx * trajectory_step)))
+                    elif trajectory == "FAILING":
+                        current_score = float(max(0, starting_score - (idx * trajectory_step)))
+                    else:
+                        current_score = float(max(0, min(100, starting_score + rng.randint(-5, 5))))
+
+                    overall = round(current_score, 2)
+                    correctness, originality, grammar, design = _subsidiary_scores_from_overall(overall, rng)
+                    decision, feedback_summary = _decision_and_feedback(overall)
+                    project_date = base_date + timedelta(days=(idx * 7) + rng.randint(0, 2))
+
+                    tags = tpl.tags if isinstance(tpl.tags, list) else []
+                    all_tags.append(tags)
+                    is_latest_project = idx == 4
+                    keep_pending_review = is_latest_project and (rng.random() < 0.30)
+
+                    assignment_status = "SUBMITTED" if keep_pending_review else "COMPLETED"
+                    assignment = StudentProjectAssignment.objects.create(
+                        student=user,
+                        project_template=tpl,
+                        status=assignment_status,
+                        recommended_by="SEED",
+                        recommendation_reason="Generated by generate_student_history",
+                        latest_evaluation_score=None if keep_pending_review else overall,
+                        latest_feedback_summary="" if keep_pending_review else feedback_summary,
+                    )
+                    StudentProjectAssignment.objects.filter(pk=assignment.pk).update(
+                        assigned_at=project_date,
+                        completed_at=None if keep_pending_review else project_date,
+                    )
+
+                    submission = ProjectSubmission.objects.create(
+                        assignment=assignment,
+                        version=1,
+                        submission_text=f"Seeded submission for {tpl.title}.",
+                        status="SUBMITTED" if keep_pending_review else "EVALUATED",
+                    )
+                    ProjectSubmission.objects.filter(pk=submission.pk).update(submitted_at=project_date)
+
+                    if keep_pending_review:
+                        continue
+
+                    scores.append(overall)
+                    evaluation = SubmissionEvaluation.objects.create(
+                        submission=submission,
+                        overall_score=overall,
+                        correctness_score=correctness,
+                        originality_score=originality,
+                        grammar_score=grammar,
+                        design_quality_score=design,
+                        decision=decision,
+                        feedback_summary=feedback_summary,
+                        rubric_scores={},
+                        strengths=["Seeded completion"],
+                        improvements=[],
+                        flags=[],
+                        is_human_reviewed=True,
+                        reviewed_by=(rng.choice(mentors_by_domain_id.get(domain.pk, [])) if mentors_by_domain_id.get(domain.pk) else None),
+                        evaluation_payload={
+                            "seeded": True,
+                            "seed_trajectory": trajectory,
+                        },
+                    )
+                    SubmissionEvaluation.objects.filter(pk=evaluation.pk).update(reviewed_at=project_date)
 
             avg = round(sum(scores) / len(scores), 2) if scores else 0.0
             completed_n = len(scores)
@@ -438,7 +647,8 @@ class Command(BaseCommand):
 
             self.stdout.write(
                 self.style.SUCCESS(
-                    f"[{i}/{len(rows)}] {email} → user {username}, {completed_n} completed, avg {avg}, "
+                    f"[{i}/{len(rows)}] {email} → user {username}, "
+                    f"{len(targets) * 5} generated ({completed_n} evaluated), avg {avg}, "
                     f"primary domain {primary.name}, {len(successful_tags)} successful_tags, "
                     "passed assessment attempt"
                 )

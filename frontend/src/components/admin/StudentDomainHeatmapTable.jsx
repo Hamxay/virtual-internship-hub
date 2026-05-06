@@ -1,5 +1,5 @@
 import React from 'react';
-import { scoreHeatmapCellClass } from '../../utils/commandCenterAnalytics';
+import { readVelocityFromRow, scoreHeatmapCellClass } from '../../utils/commandCenterAnalytics';
 
 /**
  * Pre-filtered rows and precomputed visible domain columns (smart sparse columns).
@@ -22,6 +22,7 @@ export default function StudentDomainHeatmapTable({ rows = [], domainColumns = [
               </th>
             ))}
             <th className="whitespace-nowrap px-3 py-2.5 font-semibold text-gray-700">Overall Average</th>
+            <th className="whitespace-nowrap px-3 py-2.5 font-semibold text-gray-700">Progress Change</th>
           </tr>
         </thead>
         <tbody>
@@ -63,6 +64,22 @@ export default function StudentDomainHeatmapTable({ rows = [], domainColumns = [
                     ? '–'
                     : Number(row.overall_average).toFixed(2)}
                 </td>
+                {(() => {
+                  const velocity = readVelocityFromRow(row);
+                  const velocityClass =
+                    velocity == null
+                      ? 'bg-gray-50 text-gray-400'
+                      : velocity < 0
+                        ? 'bg-red-50 text-red-600 font-medium'
+                        : velocity > 0
+                          ? 'bg-green-50 text-green-700 font-medium'
+                          : 'bg-yellow-50 text-yellow-700 font-medium';
+                  return (
+                    <td className={`whitespace-nowrap px-3 py-2 text-center ${velocityClass}`}>
+                      {velocity == null ? '–' : `${velocity >= 0 ? '+' : ''}${velocity.toFixed(1)}%`}
+                    </td>
+                  );
+                })()}
               </tr>
             ))
           )}

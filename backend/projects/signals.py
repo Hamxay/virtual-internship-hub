@@ -52,9 +52,15 @@ def notify_student_when_assignment_reviewed(sender, instance, created, **kwargs)
     from notifications.models import Notification
     from notifications.serializers import NotificationSerializer
 
+    status_phrase = (
+        'approved'
+        if instance.status == 'COMPLETED'
+        else 'sent back with requested changes'
+    )
+    project_title = getattr(instance.project_template, 'title', 'your project')
     notif = Notification.objects.create(
         recipient=instance.student,
-        message='Your project was reviewed by your mentor.',
+        message=f'Update on "{project_title}": your mentor {status_phrase}.',
         link='/student/dashboard',
     )
     payload = NotificationSerializer(notif).data
@@ -81,10 +87,16 @@ def notify_mentors_on_new_submission(sender, instance, created, **kwargs):
         .distinct()
     )
 
+    student_name = (
+        getattr(instance.assignment.student, 'username', None)
+        or f'Student #{instance.assignment.student_id}'
+    )
+    project_title = getattr(instance.assignment.project_template, 'title', 'New submission')
+
     for mentor_id in mentor_ids:
         notif = Notification.objects.create(
             recipient_id=mentor_id,
-            message='New project submitted for review in your domain.',
+            message=f'{student_name} submitted "{project_title}" for review.',
             link='/mentor/dashboard',
         )
         payload = NotificationSerializer(notif).data

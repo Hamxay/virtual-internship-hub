@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { mentorMediaAbsoluteUrl } from '../../utils/mentorMediaUrl';
 
 function latestEvaluation(submission) {
@@ -29,6 +29,29 @@ export default function SubmissionDetail({
 }) {
   const ev = useMemo(() => latestEvaluation(submission), [submission]);
   const scoreNum = ev?.overall_score != null ? Number(ev.overall_score) : null;
+  const [rubricDraft, setRubricDraft] = useState({
+    correctness: 70,
+    design: 70,
+    originality: 70,
+    communication: 70,
+  });
+
+  useEffect(() => {
+    setRubricDraft({
+      correctness: Number(ev?.correctness_score ?? 70),
+      design: Number(ev?.design_quality_score ?? 70),
+      originality: Number(ev?.originality_score ?? 70),
+      communication: Number(ev?.grammar_score ?? 70),
+    });
+  }, [ev?.id]);
+
+  const draftOverall = useMemo(() => {
+    const total = rubricDraft.correctness + rubricDraft.design + rubricDraft.originality + rubricDraft.communication;
+    return Math.round((total / 4) * 10) / 10;
+  }, [rubricDraft]);
+
+  const overallTone =
+    draftOverall < 60 ? 'text-red-600' : draftOverall < 75 ? 'text-amber-600' : 'text-emerald-600';
 
   if (!submission) {
     return (
@@ -82,26 +105,6 @@ export default function SubmissionDetail({
                 Download file
               </a>
             ) : null}
-            {submission.repository_url ? (
-              <a
-                href={submission.repository_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
-              >
-                View repository
-              </a>
-            ) : null}
-            {submission.artifact_url ? (
-              <a
-                href={submission.artifact_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
-              >
-                Open artifact
-              </a>
-            ) : null}
           </div>
           {submission.submission_text ? (
             <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/80 p-4">
@@ -109,14 +112,14 @@ export default function SubmissionDetail({
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{submission.submission_text}</p>
             </div>
           ) : null}
-          {!submission.uploaded_file && !submission.repository_url && !submission.artifact_url && !submission.submission_text ? (
+          {!submission.uploaded_file && !submission.submission_text ? (
             <p className="text-sm text-amber-800">No file, link, or text was provided for this submission.</p>
           ) : null}
         </section>
 
         {/* Section B — AI feedback */}
         <section>
-          <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">AI evaluation</h3>
+          <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Automatic score summary</h3>
           {ev ? (
             <div className="rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-5">
               <div className="flex flex-wrap items-baseline gap-3">
@@ -126,7 +129,7 @@ export default function SubmissionDetail({
                 <span className="text-lg font-medium text-slate-400">/ 100</span>
                 {ev.model_name ? (
                   <span className="ml-auto rounded-full bg-slate-200/80 px-2.5 py-0.5 text-xs font-medium text-slate-700">
-                    {ev.model_name}
+                    Auto check
                   </span>
                 ) : null}
               </div>
@@ -138,13 +141,45 @@ export default function SubmissionDetail({
               ) : null}
             </div>
           ) : (
-            <p className="text-sm text-slate-500">No AI evaluation is attached to this submission.</p>
+            <p className="text-sm text-slate-500">No automatic score is attached yet.</p>
           )}
         </section>
 
         {/* Section C — Your review */}
         <section>
           <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Your review</h3>
+          <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-semibold text-slate-900">Review score draft</p>
+              <p className={`text-lg font-bold ${overallTone}`}>{draftOverall}</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {[
+                { key: 'correctness', label: 'Correctness' },
+                { key: 'design', label: 'Design quality' },
+                { key: 'originality', label: 'Originality' },
+                { key: 'communication', label: 'Communication' },
+              ].map((item) => (
+                <label key={item.key} className="block rounded-lg border border-slate-200 bg-white px-3 py-2">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">{item.label}</span>
+                    <span className="text-sm font-semibold text-slate-800">{rubricDraft[item.key]}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={rubricDraft[item.key]}
+                    onChange={(e) => setRubricDraft((prev) => ({ ...prev, [item.key]: Number(e.target.value) }))}
+                    className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-slate-200 accent-indigo-600"
+                  />
+                </label>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              This helps you calibrate scoring visually before final approve/revision decision.
+            </p>
+          </div>
           <label htmlFor="mentor-review-feedback" className="mb-1 block text-sm font-medium text-slate-700">
             Feedback for the student <span className="text-red-500">*</span>
           </label>

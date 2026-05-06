@@ -1,4 +1,5 @@
 import React from 'react';
+import { mentorMediaAbsoluteUrl } from '../../utils/mentorMediaUrl';
 
 function normalizeTags(tags) {
   if (!tags) return [];
@@ -21,8 +22,7 @@ export default function PortfolioProjectCard({ project }) {
   const scoreRounded = typeof score === 'number' && !Number.isNaN(score) ? Math.round(score) : null;
   const rawFeedback = project?.mentor_feedback;
   const mentorFeedback = typeof rawFeedback === 'string' ? rawFeedback.trim() : '';
-  const repo = project?.repository_url;
-  const artifact = project?.artifact_url;
+  const uploaded = project?.uploaded_file;
 
   return (
     <article className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
@@ -64,24 +64,14 @@ export default function PortfolioProjectCard({ project }) {
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">
-        {hasUrl(repo) && (
+        {hasUrl(uploaded) && (
           <a
-            href={repo.trim()}
+            href={mentorMediaAbsoluteUrl(uploaded.trim())}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex flex-1 min-w-[8rem] items-center justify-center rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
           >
-            View code
-          </a>
-        )}
-        {hasUrl(artifact) && (
-          <a
-            href={artifact.trim()}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex flex-1 min-w-[8rem] items-center justify-center rounded-lg border-2 border-indigo-600 bg-white px-4 py-2.5 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50"
-          >
-            Live demo
+            Download submission
           </a>
         )}
       </div>

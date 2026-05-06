@@ -2,7 +2,13 @@
  * Command Center analytics — shared helpers for domain-centric admin views.
  * Meta keys on each student row from GET admin/reports/analytics/.
  */
-export const STUDENT_ROW_META_KEYS = new Set(['username', 'student_id', 'overall_average']);
+export const STUDENT_ROW_META_KEYS = new Set([
+  'username',
+  'student_id',
+  'overall_average',
+  'skill_insights',
+  'growth_velocity',
+]);
 
 /**
  * Domain columns that should appear for the current filtered rows (sparse-aware).
@@ -57,9 +63,10 @@ export function escapeCsvCell(value) {
  * @returns {string}
  */
 export function buildStudentMatrixCsv(rows, domainColumns) {
-  const headers = ['Student Name', ...domainColumns, 'Overall Average'];
+  const headers = ['Student Name', ...domainColumns, 'Overall Average', 'Progress Change'];
   const lines = [headers.map(escapeCsvCell).join(',')];
   for (const row of rows) {
+    const velocity = readVelocityFromRow(row);
     const cells = [
       row.username ?? '',
       ...domainColumns.map((d) => {
@@ -67,6 +74,7 @@ export function buildStudentMatrixCsv(rows, domainColumns) {
         return v == null ? '' : String(v);
       }),
       row.overall_average == null ? '' : String(row.overall_average),
+      velocity == null ? '' : `${velocity >= 0 ? '+' : ''}${velocity.toFixed(1)}%`,
     ];
     lines.push(cells.map(escapeCsvCell).join(','));
   }
@@ -90,4 +98,26 @@ export function filterStudentRowsBySearch(rows, searchQuery) {
   const q = (searchQuery || '').trim().toLowerCase();
   if (!q) return rows;
   return rows.filter((r) => (r.username || '').toLowerCase().includes(q));
+}
+
+export function readVelocityFromRow(row) {
+  if (!row || typeof row !== 'object') return null;
+  const direct = Number(row.growth_velocity);
+  if (Number.isFinite(direct)) return direct;
+  const fromInsights = row.skill_insights?.velocity_score;
+  if (typeof fromInsights !== 'string') return null;
+  const parsed = Number(fromInsights.replace('%', '').trim());
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function sortRowsByLowestVelocity(rows) {
+  return [...rows].sort((a, b) => {
+    const av = readVelocityFromRow(a);
+    const bv = readVelocityFromRow(b);
+    if (av == null && bv == null) return (a.username || '').localeCompare(b.username || '');
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (av !== bv) return av - bv;
+    return (a.username || '').localeCompare(b.username || '');
+  });
 }

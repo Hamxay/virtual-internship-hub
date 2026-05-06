@@ -288,6 +288,7 @@ class StudentListView(generics.ListAPIView):
                     project_template__domain_id=domain_id,
                 )
                 .select_related('project_template', 'project_template__domain')
+                .order_by('completed_at', 'id')
                 .prefetch_related(
                     Prefetch(
                         'submissions',

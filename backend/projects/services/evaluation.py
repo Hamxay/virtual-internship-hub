@@ -162,7 +162,7 @@ def _validate_fr4_payload(data: dict) -> dict:
 
 def _build_fr4_student_bundle(submission: ProjectSubmission) -> tuple[str, SubmissionExtractResult]:
     """
-    Route: GitHub repository (ZIP flatten) and/or uploaded document path.
+    Build student bundle from notes/text and uploaded file path.
     Returns ``(student_text_for_prompt, gatekeeper_extract)``.
     """
     sections: list[str] = []
@@ -174,16 +174,6 @@ def _build_fr4_student_bundle(submission: ProjectSubmission) -> tuple[str, Submi
     if stext:
         sections.append(f'## Student submission text\n{stext}')
 
-    repo = (submission.repository_url or '').strip()
-    try:
-        if repo and 'github.com' in repo.lower():
-            flattened = UniversalRepositoryFlattener().flatten(repo)
-            if flattened:
-                sections.append(f'## Repository source bundle\n{flattened}')
-    except Exception as exc:
-        logger.exception('Repository flatten failed: %s', exc)
-        sections.append(f'## Repository source bundle\n(Repository processing failed: {exc})')
-
     try:
         uploaded = submission.uploaded_file
         if uploaded and getattr(uploaded, 'name', None):
@@ -192,9 +182,14 @@ def _build_fr4_student_bundle(submission: ProjectSubmission) -> tuple[str, Submi
             except Exception:
                 abs_path = None
             if abs_path:
-                outcome = UniversalDocumentExtractor.process(abs_path)
-                if outcome.text_markdown:
-                    sections.append(outcome.text_markdown)
+                if str(uploaded.name).lower().endswith('.zip'):
+                    flattened = UniversalRepositoryFlattener().flatten_local_zip(abs_path)
+                    if flattened:
+                        sections.append(f'## Uploaded code archive\n{flattened}')
+                else:
+                    outcome = UniversalDocumentExtractor.process(abs_path)
+                    if outcome.text_markdown:
+                        sections.append(outcome.text_markdown)
     except Exception as exc:
         logger.exception('Document extraction failed: %s', exc)
         sections.append(f'## Uploaded document\n(Document processing failed: {exc})')
@@ -329,7 +324,7 @@ def _persist_empty_content_gate_failure(submission) -> SubmissionEvaluation:
     improvements_msg = (
         'Your submission did not contain any readable content and could not be evaluated. '
         'If you submitted a GitHub repository URL, make sure the repository is public and the URL is correct. '
-        'If you uploaded a file, please re-upload in a supported text format (DOCX, XLSX, or TXT).'
+        'Please re-upload using a supported file type and make sure the ZIP/file is not empty.'
     )
     summary = 'Submission returned no readable content and could not be evaluated.'
     evaluation = SubmissionEvaluation.objects.create(
@@ -566,8 +561,6 @@ def _submission_corpus_text(submission):
         template.business_problem,
         submission.submission_text,
         submission.notes,
-        submission.repository_url,
-        submission.artifact_url,
         ' '.join(_normalize_lines(submission.submitted_files)),
     ]
     if instruction:
@@ -633,9 +626,7 @@ def _correctness_score(submission):
 
     coverage_score = (coverage_hits / coverage_total * 100) if coverage_total else 70.0
     completeness_bonus = 0.0
-    if submission.repository_url:
-        completeness_bonus += 10.0
-    if submission.artifact_url:
+    if submission.uploaded_file:
         completeness_bonus += 8.0
     if submission.submission_text and len(submission.submission_text.strip()) >= 120:
         completeness_bonus += 12.0
@@ -692,12 +683,9 @@ def _originality_score(submission):
 
 def _design_quality_score(submission):
     assignment = submission.assignment
-    template = assignment.project_template
     score = 60.0
-    if submission.artifact_url:
+    if submission.uploaded_file:
         score += 20
-    if submission.repository_url and template.submission_type == 'CODE':
-        score += 10
     if submission.notes and len(submission.notes.strip()) >= 80:
         score += 10
     if submission.submission_text and len(submission.submission_text.strip()) >= 180:

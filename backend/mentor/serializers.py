@@ -41,8 +41,6 @@ class MentorQueueSubmissionSerializer(serializers.ModelSerializer):
         fields = (
             'id',
             'version',
-            'repository_url',
-            'artifact_url',
             'uploaded_file',
             'submission_text',
             'notes',

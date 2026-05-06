@@ -31,9 +31,6 @@ def _looks_like_python_source(text: str) -> bool:
 def _should_run_python_syntax_check(submission, extract_body: str) -> bool:
     if submission.assignment.project_template.submission_type != 'CODE':
         return False
-    url = (submission.repository_url or '').lower()
-    if '.py' in url and 'github.com' in url:
-        return True
     if _looks_like_python_source(extract_body):
         return True
     st = (submission.submission_text or '').strip()

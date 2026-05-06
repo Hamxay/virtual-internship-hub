@@ -43,9 +43,18 @@ class StudentProfileForMentorListSerializer(StudentProfileSerializer):
     domain_average = serializers.SerializerMethodField()
     projects_completed = serializers.SerializerMethodField()
     is_at_risk = serializers.SerializerMethodField()
+    skill_insights = serializers.SerializerMethodField()
+    latest_feedback_summary = serializers.SerializerMethodField()
 
     class Meta(StudentProfileSerializer.Meta):
-        fields = (*StudentProfileSerializer.Meta.fields, 'domain_average', 'projects_completed', 'is_at_risk')
+        fields = (
+            *StudentProfileSerializer.Meta.fields,
+            'domain_average',
+            'projects_completed',
+            'is_at_risk',
+            'skill_insights',
+            'latest_feedback_summary',
+        )
 
     def _completed_domain_assignments(self, obj):
         user = getattr(obj, 'user', None)
@@ -58,11 +67,13 @@ class StudentProfileForMentorListSerializer(StudentProfileSerializer):
         if hasattr(obj, '_mentor_coaching_metrics'):
             return obj._mentor_coaching_metrics
         if not self.context.get('mentor_domain_id'):
-            obj._mentor_coaching_metrics = (None, None, False)
+            obj._mentor_coaching_metrics = (None, None, False, '')
             return obj._mentor_coaching_metrics
         assignments = self._completed_domain_assignments(obj)
         count = len(assignments)
         scores = []
+        latest_feedback = ''
+        latest_key = None
         for asn in assignments:
             for sub in asn.submissions.all():
                 evals = list(sub.evaluations.all())
@@ -70,23 +81,107 @@ class StudentProfileForMentorListSerializer(StudentProfileSerializer):
                     continue
                 mean_score = sum(float(e.overall_score) for e in evals) / len(evals)
                 scores.append(mean_score)
+                newest_eval = max(
+                    evals,
+                    key=lambda e: ((e.reviewed_at or asn.completed_at or asn.assigned_at), e.id),
+                )
+                if newest_eval.feedback_summary:
+                    candidate_key = (newest_eval.reviewed_at or asn.completed_at or asn.assigned_at, newest_eval.id)
+                    if latest_key is None or candidate_key > latest_key:
+                        latest_key = candidate_key
+                        latest_feedback = newest_eval.feedback_summary
                 break
         avg = round(sum(scores) / len(scores), 2) if scores else None
         at_risk = avg is not None and avg < 60.0
-        obj._mentor_coaching_metrics = (avg, count, at_risk)
+        obj._mentor_coaching_metrics = (avg, count, at_risk, latest_feedback)
         return obj._mentor_coaching_metrics
 
     def get_projects_completed(self, obj):
-        _, count, _ = self._mentor_domain_metrics(obj)
+        _, count, _, _ = self._mentor_domain_metrics(obj)
         return count
 
     def get_domain_average(self, obj):
-        avg, _, _ = self._mentor_domain_metrics(obj)
+        avg, _, _, _ = self._mentor_domain_metrics(obj)
         return avg
 
     def get_is_at_risk(self, obj):
-        _, _, at_risk = self._mentor_domain_metrics(obj)
+        _, _, at_risk, _ = self._mentor_domain_metrics(obj)
         return at_risk
+
+    def get_latest_feedback_summary(self, obj):
+        _, _, _, latest_feedback = self._mentor_domain_metrics(obj)
+        return latest_feedback or ''
+
+    def get_skill_insights(self, obj):
+        """
+        Domain-scoped growth insight for mentor list rows.
+        Logic:
+        - Use chronological assignment means in mentor domain.
+        - Velocity score = average step delta across the sequence.
+        - Trend direction uses practical thresholds to avoid noisy flips.
+        - Advice maps directly to trend + current level.
+        """
+        request = self.context.get('request')
+        mentor_domain = None
+        if request is not None:
+            mentor_profile = getattr(request.user, 'mentor_profile', None)
+            mentor_domain = getattr(mentor_profile, 'expertise_domain', None)
+        if mentor_domain is None:
+            return None
+
+        assignments = self._completed_domain_assignments(obj)
+        if len(assignments) < 2:
+            return None
+
+        ordered_assignments = sorted(assignments, key=lambda asn: ((asn.completed_at or asn.updated_at), asn.id))
+        chronological_scores = []
+
+        for asn in ordered_assignments:
+            if asn.project_template.domain_id != mentor_domain.id:
+                continue
+            assignment_mean = None
+            for sub in asn.submissions.all():
+                evals = list(sub.evaluations.all())
+                if not evals:
+                    continue
+                assignment_mean = sum(float(ev.overall_score) for ev in evals) / len(evals)
+                break
+            if assignment_mean is not None:
+                chronological_scores.append(assignment_mean)
+
+        if len(chronological_scores) < 2:
+            return None
+
+        deltas = [
+            (chronological_scores[idx] - chronological_scores[idx - 1])
+            for idx in range(1, len(chronological_scores))
+        ]
+        velocity = sum(deltas) / len(deltas) if deltas else 0.0
+        latest_score = chronological_scores[-1]
+
+        if velocity >= 2.5:
+            trend_direction = "UP"
+            if latest_score >= 80:
+                advice = "Strong growth at a high level. Suggest higher complexity tasks."
+            else:
+                advice = "Positive trend. Keep momentum with one step-harder tasks and quick feedback."
+        elif velocity <= -2.5:
+            trend_direction = "DOWN"
+            advice = "Consistent decline. Immediate 1-on-1 intervention recommended."
+        else:
+            trend_direction = "STABLE"
+            if latest_score < 60:
+                advice = "Performance is flat below baseline. Focus on fundamentals before increasing difficulty."
+            else:
+                advice = "Steady performance. Maintain current learning path."
+
+        sign = '+' if velocity >= 0 else ''
+        return {
+            'trend_direction': trend_direction,
+            'velocity_score': f'{sign}{round(velocity, 1)}%',
+            'actionable_advice': advice,
+            'insight_window_projects': len(chronological_scores),
+        }
 
 
 class MentorProfileSerializer(serializers.ModelSerializer):

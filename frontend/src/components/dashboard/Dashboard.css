@@ -4477,7 +4477,7 @@
   top: calc(100% + 6px);
   right: 0;
   z-index: 200;
-  width: 320px;
+  width: 420px;
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
@@ -4562,6 +4562,26 @@
 .notif-item__msg { display: block; font-size: 0.875rem; color: #0f172a; line-height: 1.45; }
 .notif-item--unread .notif-item__msg { font-weight: 500; }
 .notif-item__time { display: block; margin-top: 0.25rem; font-size: 0.75rem; color: #94a3b8; }
+.notif-item__pill {
+  display: inline-flex;
+  width: fit-content;
+  margin-bottom: 0.3rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 9999px;
+  background: #e0f2fe;
+  color: #075985;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.notif-item__title {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.15rem;
+}
 
 .notif-empty {
   display: flex;

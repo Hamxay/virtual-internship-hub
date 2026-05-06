@@ -2,12 +2,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
+  Legend,
 } from 'recharts';
 import { getAdminAnalytics } from '../../api/reports.api';
 import '../../components/admin/AnalyticsCharts.css';
@@ -20,6 +23,8 @@ function rosterInDomain(students, domainName) {
       username: s.username,
       student_id: s.student_id,
       score: s[domainName],
+      skill_insights: s.skill_insights,
+      growth_velocity: s.growth_velocity,
     }))
     .filter((r) => r.score != null && Number.isFinite(Number(r.score)))
     .map((r) => ({
@@ -39,7 +44,70 @@ function curriculumKpisForDomain(students, domainName) {
   const domainAvg = Math.round((scores.reduce((a, b) => a + b, 0) / n) * 100) / 100;
   const pass = scores.filter((s) => s >= 60).length;
   const passRate = Math.round((100 * pass) / n * 10) / 10;
-  return { enrolled: n, domainAvg, passRate };
+  const velocityValues = roster
+    .map((r) => (r.skill_insights?.velocity_score != null ? Number(String(r.skill_insights.velocity_score).replace('%', '')) : null))
+    .filter((v) => v != null && Number.isFinite(v));
+  const avgCohortGrowthVelocity = velocityValues.length
+    ? Math.round((velocityValues.reduce((a, b) => a + b, 0) / velocityValues.length) * 10) / 10
+    : null;
+  return { enrolled: n, domainAvg, passRate, avgCohortGrowthVelocity };
+}
+
+function domainTrendSeriesFromAnalytics(analyticsData) {
+  const raw = analyticsData?.domain_growth_trends ?? analyticsData?.cohort_growth_trends ?? null;
+  if (!raw || typeof raw !== 'object') return [];
+
+  const domainNames = Object.keys(raw);
+  if (!domainNames.length) return [];
+
+  const timeline = [];
+  for (let idx = 0; idx < 5; idx += 1) {
+    const point = { project: `Project ${idx + 1}` };
+    let hasAny = false;
+    for (const domain of domainNames) {
+      const arr = Array.isArray(raw[domain]) ? raw[domain] : [];
+      const value = arr[idx];
+      if (value != null && Number.isFinite(Number(value))) {
+        point[domain] = Number(value);
+        hasAny = true;
+      }
+    }
+    if (hasAny) timeline.push(point);
+  }
+  return timeline;
+}
+
+function estimateTrendSeriesFromSummary(students, officialDomains, domainKpis) {
+  if (!Array.isArray(students) || !students.length || !Array.isArray(officialDomains) || !officialDomains.length) {
+    return [];
+  }
+  const byDomain = {};
+  officialDomains.forEach((domain) => {
+    const vals = students
+      .map((s) => Number(s?.[domain]))
+      .filter((n) => Number.isFinite(n));
+    if (!vals.length) return;
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const velocity = Number(domainKpis?.[domain]?.cohort_growth_velocity);
+    if (!Number.isFinite(velocity)) return;
+    const start = Math.max(0, Math.min(100, avg - velocity));
+    const end = Math.max(0, Math.min(100, avg));
+    const step = (end - start) / 4;
+    byDomain[domain] = [start, start + step, start + (step * 2), start + (step * 3), end]
+      .map((v) => Math.round(v * 100) / 100);
+  });
+
+  const domains = Object.keys(byDomain);
+  if (!domains.length) return [];
+  const out = [];
+  for (let idx = 0; idx < 5; idx += 1) {
+    const row = { project: `Project ${idx + 1}` };
+    domains.forEach((d) => {
+      row[d] = byDomain[d][idx];
+    });
+    out.push(row);
+  }
+  return out;
 }
 
 function DomainBarTooltip({ active, payload }) {
@@ -49,6 +117,20 @@ function DomainBarTooltip({ active, payload }) {
     <div className="analytics-charts-tooltip">
       <p className="analytics-charts-tooltip-title">{row.username}</p>
       <p className="analytics-charts-tooltip-meta">Score: {row.score}</p>
+    </div>
+  );
+}
+
+function DomainTrendTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="analytics-charts-tooltip">
+      <p className="analytics-charts-tooltip-title">{label}</p>
+      {payload.map((p) => (
+        <p key={p.dataKey} className="analytics-charts-tooltip-meta">
+          {p.name}: {Number(p.value).toFixed(2)}
+        </p>
+      ))}
     </div>
   );
 }
@@ -107,14 +189,29 @@ export default function CurriculumHealth() {
     () => curriculumKpisForDomain(students, selectedDomain),
     [students, selectedDomain],
   );
+  const selectedDomainGrowthVelocity = useMemo(() => {
+    const perDomain = analyticsData?.domain_kpis?.[selectedDomain];
+    const n = Number(perDomain?.cohort_growth_velocity);
+    return Number.isFinite(n) ? n : null;
+  }, [analyticsData, selectedDomain]);
 
   const barData = useMemo(() => rosterInDomain(students, selectedDomain), [students, selectedDomain]);
+  const trendData = useMemo(() => {
+    const primary = domainTrendSeriesFromAnalytics(analyticsData);
+    if (primary.length) return primary;
+    return estimateTrendSeriesFromSummary(students, officialDomains, analyticsData?.domain_kpis);
+  }, [analyticsData, students, officialDomains]);
+  const trendDomains = useMemo(
+    () => (trendData[0] ? Object.keys(trendData[0]).filter((k) => k !== 'project') : []),
+    [trendData],
+  );
+  const trendPalette = ['#2563eb', '#7c3aed', '#16a34a', '#ea580c', '#0891b2', '#dc2626', '#4f46e5'];
 
   return (
     <div className="admin-command-center">
       <header className="admin-command-center-header">
         <h1>Curriculum Health</h1>
-        <p>Macro analytics by official catalog domain: enrollment, averages, pass rate, and score distribution.</p>
+        <p>Simple domain performance view: participation, average score, baseline pass rate, and progress change.</p>
       </header>
 
       <div className="admin-command-center-body">
@@ -154,21 +251,72 @@ export default function CurriculumHealth() {
             <section className="analytics-charts-kpis mb-6">
               <div className="analytics-charts-kpi-cards">
                 <article className="analytics-kpi-card">
-                  <h3>Total Students Enrolled</h3>
+                  <h3>Students with Completed Work</h3>
                   <p className="analytics-kpi-value">{kpis.enrolled}</p>
                 </article>
                 <article className="analytics-kpi-card">
-                  <h3>Domain Average Score</h3>
+                  <h3>Average Score</h3>
                   <p className="analytics-kpi-value">{kpis.domainAvg != null ? kpis.domainAvg : '—'}</p>
                 </article>
                 <article className="analytics-kpi-card">
-                  <h3>Pass Rate (≥ 60)</h3>
+                  <h3>Students Meeting Baseline (≥ 60)</h3>
                   <p className="analytics-kpi-value">
                     {kpis.passRate != null ? `${kpis.passRate}%` : '—'}
                   </p>
                 </article>
+                <article className="analytics-kpi-card">
+                  <h3>Overall Progress Change</h3>
+                  <p
+                    className={`analytics-kpi-value ${
+                      selectedDomainGrowthVelocity == null
+                        ? ''
+                        : selectedDomainGrowthVelocity < 0
+                          ? 'text-red-600'
+                          : 'text-green-600'
+                    }`}
+                  >
+                    {selectedDomainGrowthVelocity != null
+                      ? `${selectedDomainGrowthVelocity >= 0 ? '+' : ''}${selectedDomainGrowthVelocity}%`
+                      : '—'}
+                  </p>
+                </article>
               </div>
             </section>
+
+            <div className="analytics-chart-panel mb-6">
+              <h2 className="analytics-chart-panel-title">Progress over first 5 projects (by domain)</h2>
+              <p className="analytics-chart-panel-desc">
+                Compares score movement per domain across the first five project milestones.
+              </p>
+              <div className="analytics-chart-wrap">
+                {trendData.length === 0 ? (
+                  <p className="analytics-chart-empty">
+                    Progress data is not available yet.
+                  </p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={380}>
+                    <LineChart data={trendData} margin={{ top: 20, right: 24, left: 8, bottom: 16 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="project" tick={{ fontSize: 12 }} stroke="#6b7280" />
+                      <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} stroke="#6b7280" />
+                      <Tooltip content={<DomainTrendTooltip />} />
+                      <Legend />
+                      {trendDomains.map((domain, idx) => (
+                        <Line
+                          key={domain}
+                          type="monotone"
+                          dataKey={domain}
+                          stroke={trendPalette[idx % trendPalette.length]}
+                          strokeWidth={2}
+                          dot={{ r: 2.5 }}
+                          activeDot={{ r: 4 }}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
 
             <div className="analytics-chart-panel mb-6">
               <h2 className="analytics-chart-panel-title">Score distribution — {selectedDomain}</h2>

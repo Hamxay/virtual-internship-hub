@@ -42,8 +42,7 @@ class PublicProjectShowcaseSerializer(serializers.ModelSerializer):
         model = ProjectSubmission
         fields = (
             'id',
-            'repository_url',
-            'artifact_url',
+            'uploaded_file',
             'template_title',
             'template_description',
             'template_tags',

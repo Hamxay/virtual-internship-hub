@@ -8,6 +8,7 @@ from rest_framework.views import APIView
 from accounts.permissions import IsMentor
 from projects.models import ProjectSubmission, SubmissionEvaluation
 from projects.services.recommendation import update_student_progress_snapshot
+from projects.tasks import delete_uploaded_file_for_submission
 
 from .serializers import MentorQueueSubmissionSerializer, MentorReviewActionSerializer
 
@@ -32,6 +33,10 @@ class MentorQueueView(APIView):
             ProjectSubmission.objects.filter(assignment__project_template__domain=domain)
             .filter(
                 Q(status='FLAGGED')
+                | Q(
+                    status='SUBMITTED',
+                    assignment__status='SUBMITTED',
+                )
                 | Q(
                     evaluations__decision='NEEDS_MENTOR_REVIEW',
                     evaluations__is_human_reviewed=False,
@@ -101,9 +106,12 @@ class MentorReviewActionView(APIView):
                 .first()
             )
             if not evaluation:
-                return Response(
-                    {'detail': 'No evaluation record exists for this submission.'},
-                    status=status.HTTP_400_BAD_REQUEST,
+                # Allow mentors to review direct SUBMITTED items that have not gone through AI yet.
+                evaluation = SubmissionEvaluation.objects.create(
+                    submission=submission,
+                    decision='NEEDS_MENTOR_REVIEW',
+                    feedback_summary='Pending mentor review.',
+                    is_human_reviewed=False,
                 )
             if evaluation.is_human_reviewed:
                 return Response(
@@ -131,8 +139,12 @@ class MentorReviewActionView(APIView):
             if submission.status == 'FLAGGED':
                 submission.status = 'EVALUATED'
                 submission.save(update_fields=['status'])
+            elif submission.status == 'SUBMITTED':
+                submission.status = 'EVALUATED'
+                submission.save(update_fields=['status'])
 
         update_student_progress_snapshot(assignment.student)
+        delete_uploaded_file_for_submission(submission.id)
 
         return Response(
             {

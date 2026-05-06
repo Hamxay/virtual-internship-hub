@@ -4,7 +4,7 @@
  */
 
 const SUBMISSION_TYPE_LABELS = {
-  CODE: 'GitHub code',
+  CODE: 'ZIP code upload',
   DOCUMENT: 'Written document',
   DESIGN: 'Design file',
   PDF: 'PDF',
@@ -59,9 +59,7 @@ export function projectSummaryLine(template) {
 
 /** Map API validation keys to form labels (errors only). */
 const API_FIELD_LABELS = {
-  repository_url: 'GitHub link',
   uploaded_file: 'Your file',
-  artifact_url: 'Demo link',
   submission_text: 'Summary',
   notes: 'Notes',
   submitted_files: 'Key files list',
@@ -78,8 +76,8 @@ export function friendlyApiFieldName(key) {
 export function friendlyRequirementLine(text) {
   let s = String(text || '');
   const pairs = [
-    [/Artifact URL/gi, 'File or share link'],
-    [/Repository URL/gi, 'GitHub or code link'],
+    [/Artifact URL/gi, 'Uploaded file'],
+    [/Repository URL/gi, 'Uploaded ZIP file'],
     [/Submission text/gi, 'Written answer in the form'],
     [/Virtual Internship Hub submission form/gi, 'The hand-in form'],
     [/submission form/gi, 'hand-in form'],

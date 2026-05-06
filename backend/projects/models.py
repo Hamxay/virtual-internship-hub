@@ -202,13 +202,11 @@ class ProjectSubmission(models.Model):
         related_name='submissions',
     )
     version = models.PositiveIntegerField(default=1)
-    repository_url = models.URLField(blank=True)
-    artifact_url = models.URLField(blank=True)
     uploaded_file = models.FileField(
         upload_to='submissions/%Y/%m/',
         null=True,
         blank=True,
-        help_text='Required for document/design/spreadsheet uploads; not used for CODE.',
+        help_text='Required for all submission types; CODE must upload a ZIP file.',
     )
     submission_text = models.TextField(blank=True)
     notes = models.TextField(blank=True)
@@ -234,19 +232,12 @@ class ProjectSubmission(models.Model):
             return
         template = self.assignment.project_template
         submission_type = template.submission_type
-        repo = (self.repository_url or '').strip()
         has_upload = bool(self.uploaded_file and getattr(self.uploaded_file, 'name', None))
 
-        if submission_type == 'CODE':
-            if not repo:
-                raise ValidationError({'repository_url': 'Code submissions require a repository URL.'})
-            if has_upload:
-                raise ValidationError({'uploaded_file': 'Code submissions must not include an uploaded file.'})
-        elif submission_type in FILE_SUBMISSION_TYPES:
-            if not has_upload:
-                raise ValidationError({'uploaded_file': 'This project type requires an uploaded file.'})
-            if repo:
-                raise ValidationError({'repository_url': 'File-based submissions must not include a repository URL.'})
+        if not has_upload:
+            if submission_type == 'CODE':
+                raise ValidationError({'uploaded_file': 'Code submissions require a ZIP upload.'})
+            raise ValidationError({'uploaded_file': 'This project type requires an uploaded file.'})
 
 
 class SubmissionEvaluation(models.Model):

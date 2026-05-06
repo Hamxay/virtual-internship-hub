@@ -21,7 +21,7 @@ from .models import (
 MAX_SUBMISSION_UPLOAD_BYTES = 15 * 1024 * 1024
 ALLOWED_SUBMISSION_UPLOAD_SUFFIXES = frozenset({
     '.pdf', '.doc', '.docx', '.xlsx', '.xls', '.txt',
-    '.png', '.jpg', '.jpeg', '.gif', '.webp',  # .doc: allowed upload; text extraction may be limited
+    '.png', '.jpg', '.jpeg', '.gif', '.webp', '.zip',
 })
 
 DEFAULT_RUBRIC_CRITERIA = [
@@ -194,8 +194,6 @@ class ProjectSubmissionSerializer(serializers.ModelSerializer):
         fields = (
             'id',
             'version',
-            'repository_url',
-            'artifact_url',
             'uploaded_file',
             'submission_text',
             'notes',
@@ -222,8 +220,6 @@ class ProjectSubmissionCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProjectSubmission
         fields = (
-            'repository_url',
-            'artifact_url',
             'uploaded_file',
             'submission_text',
             'notes',
@@ -255,29 +251,18 @@ class ProjectSubmissionCreateSerializer(serializers.ModelSerializer):
 
         template = assignment.project_template
         submission_type = template.submission_type
-        repository_url = (attrs.get('repository_url') or '').strip() if attrs.get('repository_url') else ''
-        attrs['repository_url'] = repository_url
         uploaded_file = attrs.get('uploaded_file')
         has_upload = bool(uploaded_file)
 
-        if submission_type == 'CODE':
-            if not repository_url:
+        if not has_upload:
+            if submission_type == 'CODE':
                 raise serializers.ValidationError(
-                    {'repository_url': 'Code submissions require a repository URL.'}
+                    {'uploaded_file': 'Code submissions require a ZIP upload.'}
                 )
-            if has_upload:
-                raise serializers.ValidationError(
-                    {'uploaded_file': 'Do not upload a file for CODE submissions.'}
-                )
-        elif submission_type in FILE_SUBMISSION_TYPES:
-            if not has_upload:
-                raise serializers.ValidationError(
-                    {'uploaded_file': 'This project type requires an uploaded file.'}
-                )
-            if repository_url:
-                raise serializers.ValidationError(
-                    {'repository_url': 'File-based submissions must not include a repository URL.'}
-                )
+            raise serializers.ValidationError(
+                {'uploaded_file': 'This project type requires an uploaded file.'}
+            )
+        if submission_type in FILE_SUBMISSION_TYPES or submission_type == 'CODE':
             size = getattr(uploaded_file, 'size', None)
             if size is not None and size > MAX_SUBMISSION_UPLOAD_BYTES:
                 raise serializers.ValidationError(
@@ -285,6 +270,10 @@ class ProjectSubmissionCreateSerializer(serializers.ModelSerializer):
                 )
             name = getattr(uploaded_file, 'name', '') or ''
             suffix = Path(name).suffix.lower()
+            if submission_type == 'CODE' and suffix != '.zip':
+                raise serializers.ValidationError(
+                    {'uploaded_file': 'Code submissions must be a .zip file.'}
+                )
             if suffix not in ALLOWED_SUBMISSION_UPLOAD_SUFFIXES:
                 raise serializers.ValidationError(
                     {
@@ -293,16 +282,6 @@ class ProjectSubmissionCreateSerializer(serializers.ModelSerializer):
                             f'Allowed: {", ".join(sorted(ALLOWED_SUBMISSION_UPLOAD_SUFFIXES))}'
                         )
                     }
-                )
-        else:
-            if (
-                not repository_url
-                and not (attrs.get('artifact_url') or '').strip()
-                and not (attrs.get('submission_text') or '').strip()
-                and not has_upload
-            ):
-                raise serializers.ValidationError(
-                    'Provide repository URL, artifact URL, submission text, or an uploaded file.'
                 )
         return attrs
 

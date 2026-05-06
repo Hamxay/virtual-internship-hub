@@ -59,6 +59,7 @@ def get_student_domain_scores():
 
     # student_id -> domain_name -> list of submission mean scores
     scores_by_student_domain = defaultdict(lambda: defaultdict(list))
+    timeline_scores_by_student = defaultdict(list)
 
     for sub in submissions:
         template = sub.assignment.project_template
@@ -72,6 +73,7 @@ def get_student_domain_scores():
         if score is None:
             continue
         scores_by_student_domain[sid][domain_name].append(score)
+        timeline_scores_by_student[sid].append((sub.assignment.completed_at, sub.id, score))
 
     matrix_avg = {}
     for sid, doms in scores_by_student_domain.items():
@@ -92,10 +94,79 @@ def get_student_domain_scores():
                 row[d_name] = None
         if active_vals:
             row['overall_average'] = round(sum(active_vals) / len(active_vals), 2)
+            timeline = sorted(timeline_scores_by_student.get(st.id, []), key=lambda t: (t[0], t[1]))
+            row['growth_velocity'] = (
+                round(timeline[-1][2] - timeline[0][2], 2) if len(timeline) >= 2 else None
+            )
         else:
             row['overall_average'] = None
+            row['growth_velocity'] = None
         out.append(row)
     return out
+
+
+def get_cohort_growth_analytics(max_steps=5):
+    """
+    Domain-level growth curves and velocity.
+    Returns:
+      - trends: {domain_name: [avg_step1..avg_stepN]}
+      - domain_kpis: {domain_name: {"cohort_growth_velocity": float|None}}
+    """
+    assignments = (
+        StudentProjectAssignment.objects.filter(
+            status='COMPLETED',
+            project_template__domain__isnull=False,
+        )
+        .select_related('student', 'project_template__domain')
+        .order_by('student_id', 'completed_at', 'id')
+        .prefetch_related(
+            Prefetch(
+                'submissions',
+                queryset=ProjectSubmission.objects.prefetch_related(
+                    Prefetch('evaluations', queryset=SubmissionEvaluation.objects.all()),
+                ),
+            ),
+        )
+    )
+
+    student_domain_scores = defaultdict(list)
+    for asn in assignments:
+        vals = []
+        for sub in asn.submissions.all():
+            m = _submission_mean_overall_score(sub)
+            if m is not None:
+                vals.append(m)
+        if not vals:
+            continue
+        domain_name = asn.project_template.domain.name
+        mean_for_assignment = sum(vals) / len(vals)
+        student_domain_scores[(asn.student_id, domain_name)].append(mean_for_assignment)
+
+    by_domain_step_scores = defaultdict(lambda: defaultdict(list))
+    for (_, domain_name), seq_scores in student_domain_scores.items():
+        for idx, score in enumerate(seq_scores[:max_steps], start=1):
+            by_domain_step_scores[domain_name][idx].append(score)
+
+    trends = {}
+    domain_kpis = {}
+    for domain_name, steps in by_domain_step_scores.items():
+        points = []
+        for idx in range(1, max_steps + 1):
+            vals = steps.get(idx, [])
+            if vals:
+                points.append(round(sum(vals) / len(vals), 2))
+            else:
+                points.append(None)
+        trends[domain_name] = points
+
+        first = points[0]
+        last = points[-1]
+        velocity = round(last - first, 2) if first is not None and last is not None else None
+        domain_kpis[domain_name] = {
+            'cohort_growth_velocity': velocity,
+        }
+
+    return trends, domain_kpis
 
 
 def _student_baseline_pct(student_id):

@@ -6,6 +6,7 @@ import {
   buildStudentMatrixCsv,
   filterStudentRowsBySearch,
   getVisibleDomainColumns,
+  sortRowsByLowestVelocity,
   triggerCsvDownload,
 } from '../../utils/commandCenterAnalytics';
 import './StudentAnalytics.css';
@@ -50,10 +51,10 @@ export default function StudentAnalytics() {
   const students = useMemo(() => analyticsData?.students ?? [], [analyticsData]);
   const officialDomains = useMemo(() => analyticsData?.official_domains ?? [], [analyticsData]);
 
-  const filteredRows = useMemo(
-    () => filterStudentRowsBySearch(students, studentSearch),
-    [students, studentSearch],
-  );
+  const filteredRows = useMemo(() => {
+    const searched = filterStudentRowsBySearch(students, studentSearch);
+    return sortRowsByLowestVelocity(searched);
+  }, [students, studentSearch]);
 
   const visibleDomainColumns = useMemo(
     () => getVisibleDomainColumns(filteredRows, officialDomains),

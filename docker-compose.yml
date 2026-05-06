@@ -1,0 +1,86 @@
+services:
+  db:
+    image: postgres:16-alpine
+    env_file:
+      - ./backend/.env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-virtual_internship_hub}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-1234}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  backend:
+    build: ./backend
+    env_file:
+      - ./backend/.env
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      REDIS_URL: redis://redis:6379/1
+    command: sh -c "python manage.py migrate && daphne -b 0.0.0.0 -p 8001 config.asgi:application"
+    ports:
+      - "8001:8001"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - backend_media:/app/media
+      - backend_static:/app/staticfiles
+
+  celery:
+    build: ./backend
+    env_file:
+      - ./backend/.env
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      REDIS_URL: redis://redis:6379/1
+    command: celery -A config worker -l info
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    volumes:
+      - backend_media:/app/media
+
+  frontend:
+    build: ./frontend
+    env_file:
+      - ./frontend/.env
+    command: npm start
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  backend_media:
+  backend_static:
+

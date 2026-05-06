@@ -10,6 +10,7 @@ import { getErrorMessage } from '../../utilities/authUtils';
 import StudentTasksSection from './StudentTasksSection';
 import CareerCoachWidget from '../chat/CareerCoachWidget';
 import Navbar from '../layout/Navbar';
+import StudentGrowthDashboard from '../student/StudentGrowthDashboard';
 import {
   GraduationCapIcon,
   LayoutDashboardIcon,
@@ -824,6 +825,8 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
           <p>{assessmentError}</p>
         </div>
       )}
+
+      <StudentGrowthDashboard />
 
       {/* Assessment block – Start Assessment when no recommendation for current domains; Assessment Passed when we have one */}
       {targetDomains.length < 2 ? (

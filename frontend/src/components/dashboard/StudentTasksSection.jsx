@@ -3,7 +3,6 @@ import { studentApi } from '../../api/student.api';
 import {
   buildProjectSubmissionPayload,
   formatSubmissionError,
-  isFileSubmissionType,
 } from '../../services/student.service';
 import {
   friendlyRequirementLine,
@@ -15,8 +14,6 @@ import {
 
 /** Form state keys match the API; labels in JSX are plain English. */
 const EMPTY_SUBMISSION_FORM = {
-  repository_url: '',
-  artifact_url: '',
   submission_text: '',
   notes: '',
   submitted_files: '',
@@ -451,8 +448,6 @@ export default function StudentTasksSection({ assessmentPassed, onStartAssessmen
   };
 
   const modalSt = submissionTarget?.project_template?.submission_type;
-  const modalIsCode = Boolean(submissionTarget) && modalSt === 'CODE';
-  const modalIsFile = Boolean(submissionTarget) && isFileSubmissionType(modalSt);
   const modalHandInLabel = handInTypeLabel(modalSt);
   const modalLevelLabel = levelLabel(submissionTarget?.project_template?.complexity);
 
@@ -581,65 +576,39 @@ export default function StudentTasksSection({ assessmentPassed, onStartAssessmen
               {modalLevelLabel ? ` · ${modalLevelLabel}` : ''}
             </p>
             <form onSubmit={submitProject} className="project-form-grid project-form-grid--simple">
-              {modalIsCode && (
-                <label className="project-form-span-2">
-                  <span className="project-form-label">GitHub link</span>
-                  <span className="student-field-hint">Paste a link to your repo or a single file on GitHub.</span>
-                  <input
-                    required
-                    type="text"
-                    inputMode="url"
-                    autoComplete="url"
-                    placeholder="https://github.com/you/project"
-                    value={submissionForm.repository_url}
-                    onChange={(e) => setSubmissionForm((prev) => ({ ...prev, repository_url: e.target.value }))}
-                  />
-                </label>
-              )}
-              {modalIsFile && (
-                <label className="project-form-span-2">
-                  <span className="project-form-label">Your file</span>
-                  <span className="student-field-hint">PDF, Word, Excel, text, or image — max 15 MB.</span>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    required
-                    accept=".pdf,.doc,.docx,.xlsx,.xls,.txt,.png,.jpg,.jpeg,.gif,.webp"
-                  />
-                </label>
-              )}
-              {!modalIsCode && !modalIsFile && (
-                <label className="project-form-span-2">
-                  <span className="project-form-label">GitHub link</span>
-                  <input value={submissionForm.repository_url} onChange={(e) => setSubmissionForm((prev) => ({ ...prev, repository_url: e.target.value }))} />
-                </label>
-              )}
               <label className="project-form-span-2">
-                <span className="project-form-label">Demo or extra link</span>
-                <span className="student-field-hint">Figma, Drive, live site — optional.</span>
+                <span className="project-form-label">Upload file</span>
+                <span className="student-field-hint">
+                  {modalSt === 'CODE'
+                    ? 'Upload one ZIP file only (max 15 MB).'
+                    : 'Upload one file (PDF, Word, Excel, text, image, or ZIP) — max 15 MB.'}
+                </span>
                 <input
-                  value={submissionForm.artifact_url}
-                  onChange={(e) => setSubmissionForm((prev) => ({ ...prev, artifact_url: e.target.value }))}
-                  placeholder="https://…"
+                  ref={fileInputRef}
+                  type="file"
+                  required
+                  accept=".zip,.pdf,.doc,.docx,.xlsx,.xls,.txt,.png,.jpg,.jpeg,.gif,.webp"
                 />
               </label>
               <label className="project-form-span-2">
                 <span className="project-form-label">Short summary</span>
-                <span className="student-field-hint">A few sentences on what you built {modalIsFile ? '(optional)' : ''}.</span>
-                <textarea rows={4} value={submissionForm.submission_text} onChange={(e) => setSubmissionForm((prev) => ({ ...prev, submission_text: e.target.value }))} />
+                <span className="student-field-hint">A few sentences on what you built (optional).</span>
+                <input
+                  value={submissionForm.submission_text}
+                  onChange={(e) => setSubmissionForm((prev) => ({ ...prev, submission_text: e.target.value }))}
+                  placeholder="What did you complete?"
+                />
               </label>
               <label className="project-form-span-2">
                 <span className="project-form-label">Notes for reviewer</span>
                 <span className="student-field-hint">Optional.</span>
                 <textarea rows={2} value={submissionForm.notes} onChange={(e) => setSubmissionForm((prev) => ({ ...prev, notes: e.target.value }))} />
               </label>
-              {(modalIsCode || (!modalIsCode && !modalIsFile)) && (
-                <label className="project-form-span-2">
-                  <span className="project-form-label">Important paths in your repo</span>
-                  <span className="student-field-hint">One per line, e.g. src/app.py — optional, helps the review.</span>
-                  <textarea rows={3} value={submissionForm.submitted_files} onChange={(e) => setSubmissionForm((prev) => ({ ...prev, submitted_files: e.target.value }))} />
-                </label>
-              )}
+              <label className="project-form-span-2">
+                <span className="project-form-label">Important files or paths in your ZIP</span>
+                <span className="student-field-hint">One per line (optional), e.g. src/app.py</span>
+                <textarea rows={3} value={submissionForm.submitted_files} onChange={(e) => setSubmissionForm((prev) => ({ ...prev, submitted_files: e.target.value }))} />
+              </label>
               <p className="project-form-note project-form-span-2">
                 We score your work in the background. Refresh this page in a few seconds to see your result.
               </p>

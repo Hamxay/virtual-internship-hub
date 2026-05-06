@@ -14,7 +14,7 @@ from projects.services.evaluation import evaluate_submission_logic
 logger = logging.getLogger(__name__)
 
 
-def _janitor_delete_uploaded_file(submission_id: int) -> None:
+def delete_uploaded_file_for_submission(submission_id: int) -> None:
     """
     Remove the stored upload from disk and clear the FileField to save space.
 
@@ -51,8 +51,5 @@ def _janitor_delete_uploaded_file(submission_id: int) -> None:
 
 @shared_task
 def async_evaluate_submission(submission_id: int) -> None:
-    """Queue FR4 evaluation; always run storage janitor afterward."""
-    try:
-        evaluate_submission_logic(submission_id)
-    finally:
-        _janitor_delete_uploaded_file(submission_id)
+    """Queue FR4 evaluation for a submission."""
+    evaluate_submission_logic(submission_id)

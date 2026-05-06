@@ -364,7 +364,7 @@ export default function AdminProjectsSection() {
               <label>
                 <span>Submission type</span>
                 <select value={templateForm.submission_type} onChange={(e) => setTemplateForm((prev) => ({ ...prev, submission_type: e.target.value }))}>
-                  <option value="CODE">Code (repo / implementation)</option>
+                  <option value="CODE">Code (ZIP upload)</option>
                   <option value="DOCUMENT">Document (general written)</option>
                   <option value="DESIGN">Design (visual / UX)</option>
                   <option value="PDF">PDF file</option>
@@ -434,7 +434,7 @@ export default function AdminProjectsSection() {
                   rows={6}
                   value={templateForm.submission_requirements}
                   onChange={(e) => setTemplateForm((prev) => ({ ...prev, submission_requirements: e.target.value }))}
-                  placeholder="e.g. Public GitHub repo URL • README with setup steps • All tests passing • PDF uploaded to …"
+                  placeholder="e.g. Upload one ZIP file • Include README with setup steps • Keep file under size limit"
                 />
               </label>
             </AdminFormSection>
@@ -561,7 +561,7 @@ export default function AdminProjectsSection() {
             <div className="pending-submission-list">
               {pendingSubmissions.slice(0, 6).map((submission) => (
                 <div key={submission.id} className="pending-submission-item">
-                  <strong>{submission.repository_url || submission.artifact_url || `Submission #${submission.id}`}</strong>
+                  <strong>{submission.uploaded_file || `Submission #${submission.id}`}</strong>
                   <span>Status: {submission.status}</span>
                   <span>Feedback: {submission.evaluations?.[0]?.feedback_summary || 'Awaiting review'}</span>
                 </div>

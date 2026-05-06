@@ -11,6 +11,7 @@ from accounts.permissions import IsAdministrator, IsMentor, IsStudent
 from .utils import (
     build_audit_csv_text,
     calculate_student_personal_progress,
+    get_cohort_growth_analytics,
     get_mentor_cohort_summary,
     get_official_domain_names,
     get_platform_kpis,
@@ -27,12 +28,15 @@ class AdminAnalyticsView(APIView):
         students = get_student_domain_scores()
         official_domains = get_official_domain_names()
         kpis = get_platform_kpis()
+        cohort_growth_trends, domain_kpis = get_cohort_growth_analytics(max_steps=5)
 
         return Response(
             {
                 "kpis": kpis,
                 "students": students,
                 "official_domains": official_domains,
+                "cohort_growth_trends": cohort_growth_trends,
+                "domain_kpis": domain_kpis,
             }
         )
 
