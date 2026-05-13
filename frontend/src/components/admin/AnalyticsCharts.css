@@ -79,6 +79,18 @@
   min-height: 320px;
 }
 
+/* Horizontal scroll when many students; Recharts uses explicit width inside */
+.student-performance-chart-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.student-performance-chart-scroll .recharts-wrapper {
+  margin: 0 auto;
+}
+
 .analytics-chart-empty {
   margin: 0;
   padding: 3rem 1rem;

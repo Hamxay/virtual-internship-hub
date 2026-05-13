@@ -5,7 +5,7 @@
     "short_description": "Create a professional freelance profile bio and tagline that attracts clients.",
     "business_problem": "New freelancers often struggle to get noticed because their profiles are too generic and don't highlight their value clearly.",
     "complexity": "BEGINNER",
-    "submission_type": "DOCUMENT",
+    "submission_type": "CODE",
     "estimated_hours": 3,
     "tags": ["personal branding", "copywriting", "freelancing"],
     "prerequisite_skills": ["Basic writing", "Self-assessment"],
@@ -51,7 +51,7 @@
     "short_description": "Write two distinct pitch templates to contact potential clients for freelance work.",
     "business_problem": "Freelancers need a systematic way to reach out to clients that feels personalized yet efficient.",
     "complexity": "BEGINNER",
-    "submission_type": "DOCUMENT",
+    "submission_type": "CODE",
     "estimated_hours": 2,
     "tags": ["outreach", "email marketing", "freelancing"],
     "prerequisite_skills": ["Professional communication"],
@@ -141,7 +141,7 @@
     "short_description": "Design a basic visual brand kit for a freelance business.",
     "business_problem": "Without a consistent visual identity, a freelancer's brand looks unprofessional and unorganized.",
     "complexity": "BEGINNER",
-    "submission_type": "DESIGN",
+    "submission_type": "CODE",
     "estimated_hours": 4,
     "tags": ["branding", "graphic design", "visual identity"],
     "prerequisite_skills": ["Basic design software (Canva/Figma)", "Color theory basics"],
@@ -695,7 +695,7 @@
     "short_description": "Map out a 3-part email automation sequence for new subscribers.",
     "business_problem": "Businesses lose leads when they don't engage new subscribers immediately with a welcome sequence.",
     "complexity": "INTERMEDIATE",
-    "submission_type": "DESIGN",
+    "submission_type": "CODE",
     "estimated_hours": 5,
     "tags": ["email marketing", "automation", "CRM"],
     "prerequisite_skills": ["Marketing logic", "Flowchart basics"],
@@ -7894,10 +7894,12 @@
         "Add a <footer> with copyright information."
       ],
       "deliverables": [
-        "A document containing the semantic HTML code structure."
+        "A ZIP file containing at least index.html and README.md."
       ],
       "submission_requirements": [
-        "Submit a single .docx or .pdf file."
+        "Code projects must be submitted as one .zip upload only.",
+        "Do not submit repository links.",
+        "README required."
       ],
       "starter_resources": [
         "MDN Semantic HTML Guide",
@@ -7924,26 +7926,28 @@
     "short_description": "Design a responsive horizontal navigation bar that adjusts to different screen sizes.",
     "business_problem": "Navigation menus are often the first thing to break on mobile devices if not planned with flexible layouts.",
     "complexity": "BEGINNER",
-    "submission_type": "DESIGN",
+    "submission_type": "CODE",
     "estimated_hours": 2,
     "tags": ["CSS", "Flexbox", "Responsive Design"],
     "prerequisite_skills": ["CSS selectors", "Box model"],
     "expected_keywords": ["display-flex", "justify-content", "align-items", "gap", "flex-wrap"],
     "active": true,
     "instruction": {
-      "overview": "Design a layout for a website header that places a logo on the left and menu links on the right using Flexbox.",
+      "overview": "Implement a website header where a logo stays on the left and menu links stay on the right using Flexbox.",
       "steps": [
-        "Draw a wireframe showing the placement of the logo and five navigation links.",
-        "Define the CSS rules to center items vertically within the bar.",
+        "Create index.html with a logo block and five navigation links.",
+        "Write CSS rules to center items vertically within the bar.",
         "Use 'space-between' to create the gap between the logo and links.",
         "Specify how the links should wrap or hide on smaller screens.",
         "Include a simple hover state design for the links."
       ],
       "deliverables": [
-        "A design wireframe and a list of the core CSS properties used."
+        "A ZIP file containing index.html, style.css, and README.md."
       ],
       "submission_requirements": [
-        "Submit as a single PNG or PDF."
+        "Code projects must be submitted as one .zip upload only.",
+        "Do not submit repository links.",
+        "README required."
       ],
       "starter_resources": [
         "A Complete Guide to Flexbox",
@@ -7970,7 +7974,7 @@
     "short_description": "Define global text styles to ensure readability and visual consistency across a site.",
     "business_problem": "Inconsistent font sizes and line heights make a website look unprofessional and tire the reader's eyes.",
     "complexity": "BEGINNER",
-    "submission_type": "DOCUMENT",
+    "submission_type": "CODE",
     "estimated_hours": 3,
     "tags": ["CSS", "Typography", "Branding"],
     "prerequisite_skills": ["Basic CSS"],
@@ -7986,10 +7990,12 @@
         "Include a section for 'link' styles (normal, hover, and active states)."
       ],
       "deliverables": [
-        "A CSS style sheet or document with the typography definitions."
+        "A ZIP file containing index.html, style.css, and README.md."
       ],
       "submission_requirements": [
-        "Submit a single .docx or .pdf file."
+        "Code projects must be submitted as one .zip upload only.",
+        "Do not submit repository links.",
+        "README required."
       ],
       "starter_resources": [
         "Type Scale Tool",
@@ -8016,26 +8022,28 @@
     "short_description": "Create a UI layout for a user profile card that works best on small screens.",
     "business_problem": "Over 50% of web traffic is mobile; designing for desktop first often results in poor mobile experiences.",
     "complexity": "BEGINNER",
-    "submission_type": "DESIGN",
+    "submission_type": "CODE",
     "estimated_hours": 4,
     "tags": ["UI Design", "Mobile-First", "CSS"],
     "prerequisite_skills": ["Basic design concepts"],
     "expected_keywords": ["border-radius", "box-shadow", "centered", "padding", "stacking"],
     "active": true,
     "instruction": {
-      "overview": "Design a 2D profile card including an avatar image, name, job title, and social media buttons.",
+      "overview": "Build a responsive profile card including an avatar image, name, job title, and social media buttons.",
       "steps": [
-        "Sketch the card layout on a mobile-sized canvas (e.g., 375px wide).",
+        "Create semantic HTML for the card layout (mobile-first).",
         "Define the 'border-radius' and 'box-shadow' to give the card a modern look.",
         "Ensure the text is centered and the buttons are 'thumb-friendly' size.",
         "Specify the padding and margins to prevent content from touching the edges.",
         "Include notes on how the layout would expand for a desktop view."
       ],
       "deliverables": [
-        "A visual mockup or image of the profile card."
+        "A ZIP file containing index.html, style.css, and README.md."
       ],
       "submission_requirements": [
-        "Submit a single PNG or PDF."
+        "Code projects must be submitted as one .zip upload only.",
+        "Do not submit repository links.",
+        "README required."
       ],
       "starter_resources": [
         "Mobile-First Design Principles",

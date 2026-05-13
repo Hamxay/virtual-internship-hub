@@ -3,7 +3,14 @@ import { useState, useRef, useEffect } from 'react';
 /**
  * Multi-select dropdown. Options are { id, name }. value: array of selected ids. onChange(ids).
  */
-export function MultiSelect({ options = [], value = [], onChange, placeholder = 'Select...', disabled }) {
+export function MultiSelect({
+  options = [],
+  value = [],
+  onChange,
+  placeholder = 'Select...',
+  disabled,
+  maxSelected = null,
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const safeOptions = Array.isArray(options) ? options : [];
@@ -19,6 +26,7 @@ export function MultiSelect({ options = [], value = [], onChange, placeholder = 
 
   const toggle = (id) => {
     if (safeValue.includes(id)) onChange(safeValue.filter((v) => v !== id));
+    else if (maxSelected != null && safeValue.length >= maxSelected) return;
     else onChange([...safeValue, id]);
   };
 

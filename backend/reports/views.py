@@ -1,6 +1,4 @@
-﻿"""
-Reports API: FR8 audit export, FR9 admin analytics, mentor cohort, student progress.
-"""
+﻿"""Reports: audit CSV, admin analytics, mentor cohort, student progress."""
 from django.http import HttpResponse
 from rest_framework import permissions
 from rest_framework.response import Response
@@ -20,7 +18,7 @@ from .utils import (
 
 
 class AdminAnalyticsView(APIView):
-    """GET admin/reports/analytics/ — KPIs and domain-centric student score matrix."""
+    """Admin KPIs and per-domain student score matrix."""
 
     permission_classes = [permissions.IsAuthenticated, IsAdministrator]
 
@@ -42,7 +40,7 @@ class AdminAnalyticsView(APIView):
 
 
 class PlatformAuditExportView(APIView):
-    """GET admin/reports/export/ — FR8 audit as CSV."""
+    """Download evaluation audit as CSV."""
 
     permission_classes = [permissions.IsAuthenticated, IsAdministrator]
 
@@ -54,7 +52,7 @@ class PlatformAuditExportView(APIView):
 
 
 class StudentPersonalProgressView(APIView):
-    """GET reports/student/me/ — FR9 skill delta for the logged-in student."""
+    """Logged-in student's skill / progress summary."""
 
     permission_classes = [permissions.IsAuthenticated, IsStudent]
 
@@ -63,7 +61,7 @@ class StudentPersonalProgressView(APIView):
 
 
 class MentorCohortAnalyticsView(APIView):
-    """GET reports/mentor/cohort/ — mentor-scoped cohort summary."""
+    """Cohort summary scoped to the logged-in mentor."""
 
     permission_classes = [permissions.IsAuthenticated, IsMentor]
 

@@ -1,8 +1,5 @@
 """
-Assessment question selection, scoring, and domain recommendation (MCQ + ML profile).
-- Composed test: up to 3 target domains, 10 questions per domain.
-- MCQ scoring is rule-based; primary domain + weighted profile use RandomForest (domain_recommendation package).
-- Submit must use submission_token from GET composed (bound question set).
+Composed assessment flow: pick questions, score MCQs, blend rule-based + ML domain recommendation.
 """
 from datetime import timedelta
 import random
@@ -42,7 +39,7 @@ def _get_questions_for_domain(domain_id: int) -> List[AssessmentQuestion]:
 def get_composed_questions(user) -> Tuple[List[dict], List[int]]:
     """
     Build the assessment for the student. Requires 2–3 target domains.
-    Uses up to MAX_TARGET_DOMAINS_FOR_TEST domains, 10 questions per domain.
+    Uses up to MAX_TARGET_DOMAINS_FOR_TEST domains (stable order by domain id), 10 questions per domain.
     Returns (list of question dicts for API, list of domain_ids in test).
     """
     profile = getattr(user, 'student_profile', None)
@@ -52,7 +49,9 @@ def get_composed_questions(user) -> Tuple[List[dict], List[int]]:
     if not profile or not profile.target_domains.exists():
         return questions_out, domain_ids_in_test
 
-    target_ids = list(profile.target_domains.values_list('id', flat=True))
+    target_ids = list(
+        profile.target_domains.order_by('id').values_list('id', flat=True)
+    )
     if len(target_ids) < MIN_TARGET_DOMAINS:
         return questions_out, domain_ids_in_test
 
@@ -179,10 +178,7 @@ def _score_composed_answers(
 def compute_composed_score_and_recommend(
     answers: List[Tuple[int, str]]
 ) -> Tuple[int, int, int, DomainScores, Optional[int], Dict[str, Any]]:
-    """
-    Score MCQs; RandomForest primary domain + weighted profile, merged with rule-based meta.
-    Returns (score, total_points, correct_count, per_domain, recommended_domain_id, recommendation_meta).
-    """
+    """Score answers; primary domain from ML with rule-based meta for transparency/fallback."""
     total_score, total_points, correct_count, per_domain = _score_composed_answers(answers)
 
     domain_names = {
@@ -192,21 +188,38 @@ def compute_composed_score_and_recommend(
     rule_meta = recommend_rule_based_with_explanation(per_domain, domain_names)
     ml_meta = build_ml_recommendation_meta(per_domain, domain_names)
     ml_primary = ml_meta.get('ml_primary_domain_id')
+    rule_primary = rule_meta.get('recommended_domain_id')
+    primary_id = ml_primary if ml_primary is not None else rule_primary
+
+    pct_map = ml_meta.get('per_domain_percentages') or {}
+    score_summary_parts = []
+    for did_str, pct in sorted(pct_map.items(), key=lambda kv: (-float(kv[1]), int(kv[0]))):
+        try:
+            did = int(did_str)
+        except (TypeError, ValueError):
+            continue
+        name = domain_names.get(did, f'Domain {did}')
+        score_summary_parts.append(f'{float(pct):.1f}% {name}')
 
     recommendation_meta: Dict[str, Any] = {
         **rule_meta,
-        'rule_based_recommended_domain_id': rule_meta.get('recommended_domain_id'),
-        'recommended_domain_id': ml_primary,
+        'rule_based_recommended_domain_id': rule_primary,
+        'recommended_domain_id': primary_id,
+        'primary_recommendation_source': (
+            'ml_random_forest' if ml_primary is not None else 'rule_based_fallback'
+        ),
+        'ml_suggested_domain_id': ml_primary,
         'method': 'random_forest',
         'weighted_domain_profile': ml_meta.get('domain_prediction_probabilities', []),
         'weighted_domain_profile_text': ml_meta.get('weighted_domain_profile_text', ''),
+        'test_score_by_domain_text': ', '.join(score_summary_parts),
         'ml_primary_domain_id': ml_primary,
         'per_domain_percentages': ml_meta.get('per_domain_percentages', {}),
         'ml_feature_domain_order': ml_meta.get('feature_domain_order', []),
         'ml_classifier_fitted': ml_meta.get('classifier_fitted', False),
     }
 
-    return total_score, total_points, correct_count, per_domain, ml_primary, recommendation_meta
+    return total_score, total_points, correct_count, per_domain, primary_id, recommendation_meta
 
 
 def sync_assessment_to_snapshot(attempt_id: int) -> None:

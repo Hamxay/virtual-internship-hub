@@ -1,9 +1,4 @@
-"""
-Lightweight career-coach scope checks (server-side).
-
-Blocks obvious biography / trivia / coding-help prompts before calling OpenRouter when
-the message has no career-related cues—reduces reliance on the model obeying system text alone.
-"""
+"""Heuristic filter: block obvious off-topic messages before calling OpenRouter."""
 
 from __future__ import annotations
 
@@ -80,12 +75,7 @@ OFF_SCOPE_COACH_REPLY = (
 
 
 def user_message_in_career_scope(text: str) -> bool:
-    """
-    Return True if the user message should be sent to the LLM.
-
-    Heuristic: if there is no obvious career/internship cue and the message looks like
-    biography/trivia or direct coding help, treat as out of scope.
-    """
+    """False for empty input, trivia openers, or coding-help without career cues."""
     raw = (text or '').strip()
     if not raw:
         return False

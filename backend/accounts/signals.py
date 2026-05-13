@@ -1,6 +1,4 @@
-"""
-Account-related signals. Connected in apps.py ready().
-"""
+"""Wire profile creation when a ``User`` is saved."""
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 

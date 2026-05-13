@@ -1,4 +1,5 @@
-FROM python:3.12-slim
+# 3.11: scikit-surprise has binary wheels; 3.12 often falls back to a broken source build in slim images.
+FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -10,9 +11,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-EXPOSE 8001
+EXPOSE 8000
 

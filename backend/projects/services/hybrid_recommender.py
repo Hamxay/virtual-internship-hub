@@ -1,13 +1,8 @@
 """
-FR3 recommendation engine — separated feeds (no TF-IDF / SVD score blending).
+Hybrid recommender: separate content-based and collaborative feeds (not blended into one score).
 
-- **content_based** feed: cold start (assessment weights + domain slots) when the student
-  has no COMPLETED assignments; otherwise tag / TF-IDF similarity vs ``successful_tags``.
-- **collaborative** feed: Surprise SVD ranking only, top N, only if
-  ``completed_projects >= MIN_COMPLETED_PROJECTS_FOR_COLLAB``; otherwise ``[]``.
-
-Candidate ``ProjectTemplate`` rows are filtered by ``complexity`` in
-``snapshot.get_allowed_difficulties()`` (difficulty progression).
+Content feed uses cold-start domain weighting or tag/TF-IDF overlap; collaborative uses SVD
+when the learner has enough completed projects. Templates respect ``get_allowed_difficulties()``.
 """
 from __future__ import annotations
 
@@ -32,7 +27,8 @@ MIN_DISTINCT_ITEMS_FOR_SVD = 3
 DOMAIN_WEIGHT_BOOST_COEFF = 0.85
 SVD_N_FACTORS = 14
 SVD_N_EPOCHS = 20
-MIN_COMPLETED_PROJECTS_FOR_COLLAB = 3
+# Start collaborative suggestions after the first completed project.
+MIN_COMPLETED_PROJECTS_FOR_COLLAB = 1
 DEFAULT_RECOMMENDATION_TOP_N = 5
 
 

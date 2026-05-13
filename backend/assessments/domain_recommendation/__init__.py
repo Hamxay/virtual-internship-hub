@@ -1,9 +1,4 @@
-"""
-Post-assessment domain signals: rule-based ranking + scikit-learn RandomForest classifier.
-
-- rule_based_ranking: highest per-domain %, ranked list, explanation (no ML).
-- sklearn_domain_classifier: RandomForest primary domain + probability weights.
-"""
+"""Domain recommendation: rule-based ranking plus RandomForest weights for metadata."""
 
 from .rule_based_ranking import (
     DomainScores,

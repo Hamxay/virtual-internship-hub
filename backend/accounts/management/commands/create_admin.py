@@ -1,9 +1,4 @@
-"""
-Create an app administrator (role=ADMINISTRATOR) who can use the frontend admin dashboard
-but cannot log in to Django admin (/admin/). Not a superuser.
-Usage: python manage.py create_admin
-Prompts for email, username, and password.
-"""
+"""Create an app ``ADMINISTRATOR`` (app dashboard only, not Django ``/admin/``)."""
 from django.core.management.base import BaseCommand
 from accounts.models import User
 

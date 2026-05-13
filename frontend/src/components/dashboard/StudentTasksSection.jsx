@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { studentApi } from '../../api/student.api';
 import {
   buildProjectSubmissionPayload,
@@ -9,17 +10,18 @@ import {
   handInTypeLabel,
   levelLabel,
   projectSummaryLine,
+  submissionPathNotesHint,
+  submissionPathNotesLabel,
   taskStatusLabel,
 } from '../../services/studentTasksLabels';
 
-/** Form state keys match the API; labels in JSX are plain English. */
 const EMPTY_SUBMISSION_FORM = {
   submission_text: '',
   notes: '',
   submitted_files: '',
 };
+const PROJECT_PASSING_SCORE = 70;
 
-/** Assignment waiting on Celery + Gemini (submission row still SUBMITTED). */
 function isAiEvaluationPending(assignment) {
   return (
     assignment.status === 'SUBMITTED'
@@ -29,7 +31,7 @@ function isAiEvaluationPending(assignment) {
 
 function getExtractedTags(submission, evaluation) {
   const fromRubric = evaluation?.rubric_scores?.extracted_tags;
-  const fromMeta = submission?.metadata?.fr4_extracted_tags;
+  const fromMeta = submission?.metadata?.extracted_tags;
   if (Array.isArray(fromRubric) && fromRubric.length) return fromRubric;
   if (Array.isArray(fromMeta) && fromMeta.length) return fromMeta;
   return [];
@@ -45,6 +47,50 @@ function formatImprovementsBlock(evaluation) {
   return '';
 }
 
+function formatMentorFeedback(value) {
+  if (typeof value === 'string') return value.trim();
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry).trim()).filter(Boolean).join('\n\n');
+  }
+  if (value == null) return '';
+  return String(value).trim();
+}
+
+function formatReviewedAt(value) {
+  if (!value) return '';
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return '';
+  return dt.toLocaleString();
+}
+
+function coerceSimilarityNumber(value) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'number' && !Number.isNaN(value)) return value;
+  const n = Number.parseFloat(String(value));
+  return Number.isNaN(n) ? null : n;
+}
+
+function getSimilarityPercent(submission) {
+  const fromMeta = coerceSimilarityNumber(submission?.metadata?.plagiarism_similarity_percent);
+  if (fromMeta != null) return fromMeta;
+  const evals = submission?.evaluations;
+  if (Array.isArray(evals)) {
+    for (const ev of evals) {
+      const fromRubric = coerceSimilarityNumber(ev?.rubric_scores?.similarity_percent);
+      if (fromRubric != null) return fromRubric;
+      const fromRubricPlag = coerceSimilarityNumber(ev?.rubric_scores?.plagiarism_similarity_percent);
+      if (fromRubricPlag != null) return fromRubricPlag;
+      const fromModelJson = coerceSimilarityNumber(ev?.rubric_scores?.model_json?.plagiarism_similarity_percent);
+      if (fromModelJson != null) return fromModelJson;
+      const fromPayload = coerceSimilarityNumber(ev?.evaluation_payload?.similarity_percentage);
+      if (fromPayload != null) return fromPayload;
+      const fromPayloadLocal = coerceSimilarityNumber(ev?.evaluation_payload?.plagiarism_similarity_percent);
+      if (fromPayloadLocal != null) return fromPayloadLocal;
+    }
+  }
+  return null;
+}
+
 function statusBadgeClass(status) {
   if (status === 'COMPLETED') return 'complete';
   if (status === 'NEEDS_REVISION') return 'danger';
@@ -53,16 +99,17 @@ function statusBadgeClass(status) {
   return 'beginner';
 }
 
-/** Project details popup — shows on card click. */
 function ProjectDetailsModal({ assignment, onClose, onOpenSubmit }) {
   const template = assignment.project_template || {};
-  const inst = template.instruction || {};
-  const submissionReqs = Array.isArray(inst.submission_requirements) ? inst.submission_requirements : [];
-  const deliverables = Array.isArray(inst.deliverables) ? inst.deliverables : [];
-  const steps = Array.isArray(inst.steps) ? inst.steps : [];
+  const instruction = template.instruction || {};
+  const submissionReqs = Array.isArray(instruction.submission_requirements)
+    ? instruction.submission_requirements
+    : [];
+  const deliverables = Array.isArray(instruction.deliverables) ? instruction.deliverables : [];
+  const steps = Array.isArray(instruction.steps) ? instruction.steps : [];
   const hasInstructions = Boolean(
     (template.business_problem && String(template.business_problem).trim())
-    || (inst.overview && String(inst.overview).trim())
+    || (instruction.overview && String(instruction.overview).trim())
     || steps.length
     || deliverables.length,
   );
@@ -70,17 +117,58 @@ function ProjectDetailsModal({ assignment, onClose, onOpenSubmit }) {
   const isEvaluating = isAiEvaluationPending(assignment);
   const summary = projectSummaryLine(template);
 
-  const sub = assignment.latest_submission;
-  const ev = sub?.evaluations?.[0];
-  const scoreNum = ev?.overall_score != null ? Math.round(Number(ev.overall_score)) : null;
-  const tags = ev ? getExtractedTags(sub, ev) : [];
-  const impBlock = ev ? formatImprovementsBlock(ev) : '';
+  const latestSubmission = assignment.latest_submission;
+  const evaluations = Array.isArray(latestSubmission?.evaluations) ? latestSubmission.evaluations : [];
+  const primaryEvaluation = evaluations[0];
+  const mentorReviewedEvaluation = evaluations.find((evaluation) => (
+    evaluation?.is_human_reviewed === true && formatMentorFeedback(evaluation?.mentor_feedback)
+  ));
+  const mentorFeedbackText = mentorReviewedEvaluation
+    ? formatMentorFeedback(mentorReviewedEvaluation.mentor_feedback)
+    : '';
+  const mentorReviewedAt = mentorReviewedEvaluation
+    ? formatReviewedAt(mentorReviewedEvaluation.reviewed_at)
+    : '';
+  const scoreNum = primaryEvaluation?.overall_score != null
+    ? Math.round(Number(primaryEvaluation.overall_score))
+    : null;
+  const scoreIsBelowPassing = scoreNum != null && scoreNum < PROJECT_PASSING_SCORE;
+  const correctnessNum = primaryEvaluation?.correctness_score != null
+    ? Math.round(Number(primaryEvaluation.correctness_score))
+    : null;
+  const originalityNum = primaryEvaluation?.originality_score != null
+    ? Math.round(Number(primaryEvaluation.originality_score))
+    : null;
+  const grammarNum = primaryEvaluation?.grammar_score != null
+    ? Math.round(Number(primaryEvaluation.grammar_score))
+    : null;
+  const designNum = primaryEvaluation?.design_quality_score != null
+    ? Math.round(Number(primaryEvaluation.design_quality_score))
+    : null;
+  const plagiarismSummary = assignment.plagiarism && typeof assignment.plagiarism === 'object'
+    ? assignment.plagiarism
+    : null;
+  const similarityFromAssignment = plagiarismSummary
+    ? coerceSimilarityNumber(plagiarismSummary.similarity_percent)
+    : null;
+  const similarityPct = similarityFromAssignment != null
+    ? similarityFromAssignment
+    : getSimilarityPercent(latestSubmission);
+  const plagiarismMeta = latestSubmission?.metadata && typeof latestSubmission.metadata === 'object'
+    ? latestSubmission.metadata
+    : {};
+  const plagiarismStatus = plagiarismSummary?.scan_status ?? plagiarismMeta.plagiarism_status;
+  const plagiarismPending = similarityPct == null && String(plagiarismStatus).toLowerCase() === 'submitted';
+  const plagiarismPctFromEval = primaryEvaluation?.plagiarism_similarity_percent != null
+    ? coerceSimilarityNumber(primaryEvaluation.plagiarism_similarity_percent)
+    : null;
+  const tags = primaryEvaluation ? getExtractedTags(latestSubmission, primaryEvaluation) : [];
+  const improvementsText = primaryEvaluation ? formatImprovementsBlock(primaryEvaluation) : '';
 
   return (
     <div className="project-modal-overlay" onClick={onClose}>
       <div className="pmd-card" onClick={(e) => e.stopPropagation()}>
 
-        {/* Header */}
         <div className="pmd-header">
           <div className="pmd-header__text">
             <h2 className="pmd-title">{template.title || 'Project'}</h2>
@@ -89,7 +177,6 @@ function ProjectDetailsModal({ assignment, onClose, onOpenSubmit }) {
           <button type="button" className="pmd-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
-        {/* Scrollable body */}
         <div className="pmd-body">
 
           {template.short_description ? (
@@ -117,10 +204,10 @@ function ProjectDetailsModal({ assignment, onClose, onOpenSubmit }) {
                     <p className="pmd-block__text">{template.business_problem}</p>
                   </div>
                 ) : null}
-                {inst.overview && String(inst.overview).trim() ? (
+                {instruction.overview && String(instruction.overview).trim() ? (
                   <div className="pmd-block">
                     <h4 className="pmd-block__title">Overview</h4>
-                    <p className="pmd-block__text">{inst.overview}</p>
+                    <p className="pmd-block__text">{instruction.overview}</p>
                   </div>
                 ) : null}
                 {steps.length > 0 ? (
@@ -145,10 +232,24 @@ function ProjectDetailsModal({ assignment, onClose, onOpenSubmit }) {
 
           <div className="pmd-score-row">
             <span className="pmd-score-label">Last score</span>
-            <span className="pmd-score-value">
+            <span
+              className="pmd-score-value"
+              style={scoreIsBelowPassing ? {
+                color: '#b91c1c',
+                background: '#fee2e2',
+                borderRadius: 6,
+                padding: '0.2rem 0.45rem',
+              } : undefined}
+            >
               {scoreNum != null && !Number.isNaN(scoreNum) ? `${scoreNum} / 100` : (assignment.latest_evaluation_score ?? '—')}
             </span>
           </div>
+          <p
+            className="student-field-hint"
+            style={{ marginTop: '0.35rem', marginBottom: 0 }}
+          >
+            Passing score: {PROJECT_PASSING_SCORE}/100
+          </p>
 
           {isEvaluating && (
             <div className="student-task-ai-evaluating" role="status" aria-live="polite">
@@ -157,16 +258,41 @@ function ProjectDetailsModal({ assignment, onClose, onOpenSubmit }) {
             </div>
           )}
 
-          {ev && (
+          {primaryEvaluation && (
             <div className="pmd-feedback">
               <strong className="pmd-feedback__title">AI feedback</strong>
-              {ev.feedback_summary ? (
-                <p className="pmd-feedback__text">{ev.feedback_summary}</p>
+              <div className="student-task-ai-tags" style={{ marginBottom: '0.5rem' }}>
+                {correctnessNum != null && <span className="student-task-ai-tag">Correctness: {correctnessNum}/100</span>}
+                {originalityNum != null && (
+                  <span className="student-task-ai-tag" title="LLM estimate of originality, separate from plagiarism similarity.">
+                    Originality (AI): {originalityNum}/100
+                  </span>
+                )}
+                {grammarNum != null && <span className="student-task-ai-tag">Grammar: {grammarNum}/100</span>}
+                {designNum != null && <span className="student-task-ai-tag">Design: {designNum}/100</span>}
+                {plagiarismPctFromEval != null && similarityPct == null && (
+                  <span className="student-task-ai-tag" title="Local TF-IDF plagiarism similarity.">
+                    Plagiarism: {Math.round(Number(plagiarismPctFromEval))}%
+                  </span>
+                )}
+                {similarityPct != null && (
+                  <span className="student-task-ai-tag" title="Local TF-IDF plagiarism similarity.">
+                    Plagiarism: {Math.round(Number(similarityPct))}%
+                  </span>
+                )}
+                {plagiarismPending && (
+                  <span className="student-task-ai-tag" title="Plagiarism similarity score is still processing.">
+                    Plagiarism: pending…
+                  </span>
+                )}
+              </div>
+              {primaryEvaluation.feedback_summary ? (
+                <p className="pmd-feedback__text">{primaryEvaluation.feedback_summary}</p>
               ) : null}
-              {impBlock ? (
+              {improvementsText ? (
                 <>
                   <strong className="pmd-feedback__title" style={{ display: 'block', marginTop: '0.5rem' }}>Improvements</strong>
-                  <p className="pmd-feedback__text">{impBlock}</p>
+                  <p className="pmd-feedback__text">{improvementsText}</p>
                 </>
               ) : null}
               {tags.length > 0 && (
@@ -181,9 +307,23 @@ function ProjectDetailsModal({ assignment, onClose, onOpenSubmit }) {
               )}
             </div>
           )}
+
+          {mentorFeedbackText && (
+            <div
+              className="pmd-feedback"
+              style={{ marginTop: '0.85rem', border: '1px solid #bfdbfe', background: '#eff6ff' }}
+            >
+              <strong className="pmd-feedback__title">Mentor feedback</strong>
+              <p className="pmd-feedback__text">{mentorFeedbackText}</p>
+              {mentorReviewedAt && (
+                <p className="pmd-feedback__text" style={{ marginTop: '0.4rem', fontSize: '0.8rem', color: '#475569' }}>
+                  Reviewed on {mentorReviewedAt}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Footer */}
         <div className="pmd-footer">
           <button type="button" className="btn-outline-small" onClick={onClose}>Close</button>
           {canSubmit && (
@@ -203,7 +343,6 @@ function ProjectDetailsModal({ assignment, onClose, onOpenSubmit }) {
   );
 }
 
-/** Simple vertical list of project cards. Clicking a card opens the details popup. */
 function TaskAssignmentList({ assignments, onOpenDetails, onAccept, onOpenSubmit }) {
   if (assignments.length === 0) return null;
 
@@ -261,6 +400,7 @@ function TaskAssignmentList({ assignments, onOpenDetails, onAccept, onOpenSubmit
 }
 
 export default function StudentTasksSection({ assessmentPassed, onStartAssessment, onStatsChange }) {
+  const location = useLocation();
   const [assignments, setAssignments] = useState([]);
   const [progress, setProgress] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -271,6 +411,7 @@ export default function StudentTasksSection({ assessmentPassed, onStartAssessmen
   const [submissionForm, setSubmissionForm] = useState(EMPTY_SUBMISSION_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [detailsTarget, setDetailsTarget] = useState(null);
+  const [handledDeepLink, setHandledDeepLink] = useState(false);
   const fileInputRef = useRef(null);
 
   const closeSubmitModal = useCallback(() => {
@@ -293,14 +434,16 @@ export default function StudentTasksSection({ assessmentPassed, onStartAssessmen
         studentApi.getAssignments(),
         studentApi.getProgressSnapshot(),
       ]);
-      const assignmentData = assignmentRes?.data;
-      const list = Array.isArray(assignmentData) ? assignmentData : (assignmentData?.results || []);
-      setAssignments(list);
+      const payload = assignmentRes?.data;
+      const studentAssignments = Array.isArray(payload) ? payload : (payload?.results || []);
+      setAssignments(studentAssignments);
       setProgress(progressRes?.data || null);
       if (typeof onStatsChange === 'function') {
         onStatsChange({
-          completed: list.filter((item) => item.status === 'COMPLETED').length,
-          inProgress: list.filter((item) => ['IN_PROGRESS', 'NEEDS_REVISION', 'SUBMITTED', 'PENDING_MENTOR_REVIEW'].includes(item.status)).length,
+          completed: studentAssignments.filter((row) => row.status === 'COMPLETED').length,
+          inProgress: studentAssignments.filter((row) => (
+            ['IN_PROGRESS', 'NEEDS_REVISION', 'SUBMITTED', 'PENDING_MENTOR_REVIEW'].includes(row.status)
+          )).length,
         });
       }
       setError('');
@@ -318,7 +461,7 @@ export default function StudentTasksSection({ assessmentPassed, onStartAssessmen
 
   const pendingAiEvaluation = useMemo(
     () => assignments.some(
-      (a) => a.status === 'SUBMITTED' && a.latest_submission?.status === 'SUBMITTED',
+      (row) => row.status === 'SUBMITTED' && row.latest_submission?.status === 'SUBMITTED',
     ),
     [assignments],
   );
@@ -330,29 +473,31 @@ export default function StudentTasksSection({ assessmentPassed, onStartAssessmen
 
     const pollOnce = async () => {
       if (stopped) return;
-      const rows = assignmentsRef.current.filter(
-        (a) => a.status === 'SUBMITTED' && a.latest_submission?.status === 'SUBMITTED',
+      const awaitingGrading = assignmentsRef.current.filter(
+        (row) => row.status === 'SUBMITTED' && row.latest_submission?.status === 'SUBMITTED',
       );
-      if (rows.length === 0) return;
+      if (awaitingGrading.length === 0) return;
 
-      for (let i = 0; i < rows.length; i += 1) {
-        const sid = rows[i].latest_submission?.id;
-        if (!sid) continue;
+      const pollSubmissionByIndex = async (index) => {
+        if (stopped || index >= awaitingGrading.length) return;
+        const submissionId = awaitingGrading[index]?.latest_submission?.id;
+        if (!submissionId) {
+          await pollSubmissionByIndex(index + 1);
+          return;
+        }
         try {
-          // eslint-disable-next-line no-await-in-loop
-          const { data } = await studentApi.getSubmissionFeedback(sid);
+          const { data } = await studentApi.getSubmissionFeedback(submissionId);
           if (stopped) return;
           if (data.status !== 'SUBMITTED') {
             await loadAssignments();
             return;
           }
-        } catch (err) {
-          if (!stopped) {
-            // eslint-disable-next-line no-console
-            console.warn('Submission feedback poll failed:', err);
-          }
+        } catch {
+          /* transient network or 404 — try next submission on this tick */
         }
-      }
+        await pollSubmissionByIndex(index + 1);
+      };
+      await pollSubmissionByIndex(0);
     };
 
     pollOnce();
@@ -362,6 +507,28 @@ export default function StudentTasksSection({ assessmentPassed, onStartAssessmen
       clearInterval(timer);
     };
   }, [pendingAiEvaluation, loadAssignments]);
+
+  const pendingMentorReviewExists = useMemo(
+    () => assignments.some((a) => a.status === 'PENDING_MENTOR_REVIEW'),
+    [assignments],
+  );
+
+  useEffect(() => {
+    if (!pendingMentorReviewExists) return undefined;
+    let stopped = false;
+    const timer = setInterval(async () => {
+      if (stopped) return;
+      try {
+        await loadAssignments();
+      } catch {
+        /* ignore periodic refresh errors */
+      }
+    }, 10000);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [pendingMentorReviewExists, loadAssignments]);
 
   const refreshRecommendations = useCallback(async () => {
     setRefreshingRecommendations(true);
@@ -387,6 +554,33 @@ export default function StudentTasksSection({ assessmentPassed, onStartAssessmen
 
   const openDetails = useCallback((assignment) => setDetailsTarget(assignment), []);
   const closeDetails = useCallback(() => setDetailsTarget(null), []);
+
+  useEffect(() => {
+    if (!detailsTarget) return;
+    const latestAssignment = assignments.find((item) => item.id === detailsTarget.id);
+    if (latestAssignment && latestAssignment !== detailsTarget) {
+      setDetailsTarget(latestAssignment);
+    }
+  }, [assignments, detailsTarget]);
+
+  useEffect(() => {
+    if (handledDeepLink || assignments.length === 0) return;
+    const params = new URLSearchParams(location.search);
+    const requestedView = params.get('task_view');
+    const assignmentIdRaw = params.get('assignment_id');
+    const assignmentId = Number.parseInt(assignmentIdRaw || '', 10);
+    if (requestedView !== 'tasks' || Number.isNaN(assignmentId)) return;
+
+    const target = assignments.find((a) => a.id === assignmentId);
+    if (!target) {
+      setHandledDeepLink(true);
+      return;
+    }
+
+    setActiveTab('active');
+    setDetailsTarget(target);
+    setHandledDeepLink(true);
+  }, [assignments, handledDeepLink, location.search]);
 
   const sortByAssignedAtDesc = (a, b) => {
     const ta = a.assigned_at ? new Date(a.assigned_at).getTime() : 0;
@@ -447,8 +641,8 @@ export default function StudentTasksSection({ assessmentPassed, onStartAssessmen
     }
   };
 
-  const modalSt = submissionTarget?.project_template?.submission_type;
-  const modalHandInLabel = handInTypeLabel(modalSt);
+  const submitModalSubmissionType = submissionTarget?.project_template?.submission_type;
+  const modalHandInLabel = handInTypeLabel(submitModalSubmissionType);
   const modalLevelLabel = levelLabel(submissionTarget?.project_template?.complexity);
 
   if (!assessmentPassed) {
@@ -579,7 +773,7 @@ export default function StudentTasksSection({ assessmentPassed, onStartAssessmen
               <label className="project-form-span-2">
                 <span className="project-form-label">Upload file</span>
                 <span className="student-field-hint">
-                  {modalSt === 'CODE'
+                  {submitModalSubmissionType === 'CODE'
                     ? 'Upload one ZIP file only (max 15 MB).'
                     : 'Upload one file (PDF, Word, Excel, text, image, or ZIP) — max 15 MB.'}
                 </span>
@@ -605,8 +799,8 @@ export default function StudentTasksSection({ assessmentPassed, onStartAssessmen
                 <textarea rows={2} value={submissionForm.notes} onChange={(e) => setSubmissionForm((prev) => ({ ...prev, notes: e.target.value }))} />
               </label>
               <label className="project-form-span-2">
-                <span className="project-form-label">Important files or paths in your ZIP</span>
-                <span className="student-field-hint">One per line (optional), e.g. src/app.py</span>
+                <span className="project-form-label">{submissionPathNotesLabel(submitModalSubmissionType)}</span>
+                <span className="student-field-hint">{submissionPathNotesHint(submitModalSubmissionType)}</span>
                 <textarea rows={3} value={submissionForm.submitted_files} onChange={(e) => setSubmissionForm((prev) => ({ ...prev, submitted_files: e.target.value }))} />
               </label>
               <p className="project-form-note project-form-span-2">

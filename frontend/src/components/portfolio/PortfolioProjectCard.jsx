@@ -25,11 +25,13 @@ export default function PortfolioProjectCard({ project }) {
   const uploaded = project?.uploaded_file;
 
   return (
-    <article className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
+    <article className="flex h-full flex-col rounded-xl border border-cyan-200 bg-white p-5 shadow-md shadow-cyan-200/50 sm:p-6">
       <div className="flex flex-1 flex-col gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
-          {description ? <p className="mt-2 text-sm leading-relaxed text-slate-600">{description}</p> : null}
+          <h2 className="text-lg font-semibold text-cyan-950 sm:text-xl">{title}</h2>
+          {description ? (
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">{description}</p>
+          ) : null}
         </div>
 
         {tags.length > 0 && (
@@ -37,7 +39,7 @@ export default function PortfolioProjectCard({ project }) {
             {tags.map((tag) => (
               <span
                 key={tag}
-                className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
+                className="rounded border border-cyan-200 bg-cyan-100 px-2 py-0.5 text-xs font-medium text-cyan-900"
               >
                 {tag}
               </span>
@@ -46,35 +48,35 @@ export default function PortfolioProjectCard({ project }) {
         )}
 
         {scoreRounded !== null && (
-          <div className="rounded-xl border border-amber-100 bg-amber-50/80 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-800/90">Score</p>
-            <p className="mt-1 text-2xl font-bold text-amber-950">
-              AI Score: <span className="tabular-nums">{scoreRounded}</span>
-              <span className="text-lg font-semibold text-amber-900/80">/100</span>
+          <div className="rounded-r-md border-l-4 border-emerald-500 bg-emerald-100 py-3 pl-4 pr-3">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-800">Evaluation score</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums text-emerald-950">
+              {scoreRounded}
+              <span className="text-base font-medium text-slate-500">/100</span>
             </p>
           </div>
         )}
 
         {mentorFeedback ? (
-          <blockquote className="rounded-xl border-l-4 border-indigo-500 bg-indigo-50/60 px-4 py-3 text-sm leading-relaxed text-slate-800">
-            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">Mentor verification</p>
-            <p className="mt-2 text-slate-800">"{mentorFeedback}"</p>
+          <blockquote className="rounded-r-md border-l-4 border-sky-500 bg-sky-100 py-3 pl-4 pr-3 text-sm leading-relaxed text-slate-700">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-sky-800">Mentor review</p>
+            <p className="mt-2">{mentorFeedback}</p>
           </blockquote>
         ) : null}
       </div>
 
-      <div className="mt-6 flex flex-wrap gap-3">
-        {hasUrl(uploaded) && (
+      {hasUrl(uploaded) && (
+        <div className="mt-5 border-t border-cyan-200 pt-5">
           <a
             href={mentorMediaAbsoluteUrl(uploaded.trim())}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex flex-1 min-w-[8rem] items-center justify-center rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+            className="inline-flex items-center justify-center rounded-md border border-cyan-600 bg-cyan-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-700"
           >
-            Download submission
+            View submission file
           </a>
-        )}
-      </div>
+        </div>
+      )}
     </article>
   );
 }

@@ -1,9 +1,7 @@
 """
-FR4 — Extract text or local file paths from uploaded student files for AI evaluation.
+Normalize student uploads into text or path hints for extractors downstream.
 
-- ``.docx``: paragraph text via python-docx.
-- ``.xlsx``: sheet data as CSV-like string via pandas/openpyxl.
-- ``.pdf`` / common images / ``.zip``: keep local path marker for downstream processors.
+``.docx`` / ``.xlsx`` become text; PDF, images, and ZIP stay as paths for specialized handlers.
 """
 from __future__ import annotations
 

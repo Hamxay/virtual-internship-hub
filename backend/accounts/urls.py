@@ -1,7 +1,4 @@
-"""
-All API URLs in one file. Mounted at /api/ in config.
-Sections: auth, students, mentors, admin, domains.
-"""
+"""Account routes (mounted under ``/api/``)."""
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -28,7 +25,6 @@ from .views import (
 )
 
 urlpatterns = [
-    # --------------- Auth ---------------
     path('auth/register/send-otp/', SendSignupOTPView.as_view(), name='auth-register-send-otp'),
     path('auth/register/verify/', VerifySignupAndRegisterView.as_view(), name='auth-register-verify'),
     path('auth/login/', LoginView.as_view(), name='auth-login'),
@@ -42,15 +38,12 @@ urlpatterns = [
     # --------------- Student ---------------
     path('students/profile/', StudentProfileView.as_view(), name='student-profile'),
     path('students/', StudentListView.as_view(), name='student-list'),
-    # --------------- Mentor ---------------
     path('mentors/profile/', MentorProfileView.as_view(), name='mentor-profile'),
     path('mentors/', MentorListView.as_view(), name='mentor-list'),
-    # --------------- Admin ---------------
     path('admin/administrators/', CreateAdministratorView.as_view(), name='admin-create-administrator'),
     path('admin/users/students/', AdminStudentListView.as_view(), name='admin-users-students'),
     path('admin/users/mentors/', AdminMentorListView.as_view(), name='admin-users-mentors'),
     path('admin/domains/', AdminDomainListCreateView.as_view(), name='admin-domain-list-create'),
     path('admin/domains/<int:pk>/', AdminDomainDetailView.as_view(), name='admin-domain-detail'),
-    # --------------- Domains ---------------
     path('domains/', DomainListView.as_view(), name='domain-list'),
 ]

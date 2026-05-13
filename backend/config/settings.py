@@ -5,6 +5,7 @@ Django settings for virtual-internship-hub project.
 from pathlib import Path
 from datetime import timedelta
 import os
+from urllib.parse import urlparse
 from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -15,8 +16,42 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-this-in-produc
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
+COPYLEAKS_WEBHOOK_BASE_URL = config('COPYLEAKS_WEBHOOK_BASE_URL', default='').strip()
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
+
+
+def _normalize_allowed_host(value: str) -> str:
+    token = (value or '').strip().strip('"').strip("'")
+    if not token:
+        return ''
+    if token.startswith('.'):
+        return token
+    parsed = urlparse(token if '://' in token else f'//{token}')
+    if parsed.hostname:
+        return parsed.hostname.strip()
+    normalized = token.split('://', 1)[-1]
+    normalized = normalized.split('/', 1)[0]
+    normalized = normalized.split(':', 1)[0]
+    return normalized.strip()
+
+
+def _add_allowed_host(value: str) -> None:
+    host = _normalize_allowed_host(value)
+    if host and host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(host)
+
+
+# Comma-separated hostnames or URLs for tunneling (e.g. ngrok).
+_extra_allowed = config('EXTRA_ALLOWED_HOSTS', default='')
+if _extra_allowed:
+    for item in _extra_allowed.split(','):
+        _add_allowed_host(item)
+
+_add_allowed_host(COPYLEAKS_WEBHOOK_BASE_URL)
+if DEBUG:
+    _add_allowed_host('.ngrok-free.app')
+    _add_allowed_host('.ngrok.io')
 
 # Application definition
 INSTALLED_APPS = [
@@ -201,6 +236,11 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
 ]
 
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only in development
 
@@ -330,7 +370,7 @@ JAZZMIN_UI_TWEAKS = {
     "actions_sticky_top": True,
 }
 
-# --- Celery (async tasks: FR4 evaluation) ---
+# --- Celery (async project evaluation) ---
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default=CELERY_BROKER_URL)
 CELERY_TASK_ALWAYS_EAGER = config('CELERY_TASK_ALWAYS_EAGER', default=False, cast=bool)
@@ -339,7 +379,7 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 
-# --- ASGI / Django Channels (FR10 live notifications) ---
+# --- ASGI / Django Channels (live notifications) ---
 ASGI_APPLICATION = 'config.asgi.application'
 REDIS_URL = config('REDIS_URL', default='redis://localhost:6379/1')
 CHANNEL_LAYERS = {
@@ -351,11 +391,9 @@ CHANNEL_LAYERS = {
     },
 }
 
-# --- OpenRouter (FR4 project evaluation + FR7 career chat) ---
+# --- OpenRouter (project evaluation + career chat) ---
 OPENROUTER_API_KEY = config('OPENROUTER_API_KEY', default='')
 OPENROUTER_BASE_URL = config('OPENROUTER_BASE_URL', default='https://openrouter.ai/api/v1').rstrip('/')
-# Override via OPENROUTER_CHAT_MODEL / OPENROUTER_PROJECT_EVAL_MODEL env vars.
-# Find valid free model IDs in your OpenRouter dashboard → Models → filter by "free".
 OPENROUTER_CHAT_MODEL = config(
     'OPENROUTER_CHAT_MODEL',
     default='openai/gpt-oss-120b:free',
@@ -364,6 +402,12 @@ OPENROUTER_PROJECT_EVAL_MODEL = config(
     'OPENROUTER_PROJECT_EVAL_MODEL',
     default='openai/gpt-oss-120b:free',
 )
+OPENROUTER_VISION_MODEL = config('OPENROUTER_VISION_MODEL', default='openrouter/free')
 OPENROUTER_HTTP_REFERER = config('OPENROUTER_HTTP_REFERER', default='http://localhost:3000')
 OPENROUTER_APP_TITLE = config('OPENROUTER_APP_TITLE', default='Virtual Internship Hub')
+
+# --- Copyleaks (external plagiarism scanning) ---
+COPYLEAKS_EMAIL = config('COPYLEAKS_EMAIL', default='')
+COPYLEAKS_API_KEY = config('COPYLEAKS_API_KEY', default='')
+COPYLEAKS_SANDBOX = config('COPYLEAKS_SANDBOX', default=False, cast=bool)
 

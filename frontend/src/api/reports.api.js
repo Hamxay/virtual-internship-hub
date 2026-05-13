@@ -2,19 +2,13 @@ import { client } from './client';
 
 const ADMIN_REPORTS_BASE = 'admin/reports';
 
-/**
- * FR9 admin analytics (KPIs and official-domain student matrix).
- * @returns {Promise<import('axios').AxiosResponse['data']>}
- */
+/** Admin analytics payload (KPIs + student × domain matrix). */
 export async function getAdminAnalytics() {
   const { data } = await client.get(`${ADMIN_REPORTS_BASE}/analytics/`);
   return data;
 }
 
-/**
- * FR8 audit CSV — binary download (blob).
- * @returns {Promise<Blob>}
- */
+/** Audit export as ``Blob`` (file download). */
 export async function downloadAuditCsv() {
   const { data } = await client.get(`${ADMIN_REPORTS_BASE}/export/`, {
     responseType: 'blob',

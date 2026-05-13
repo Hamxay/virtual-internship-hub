@@ -38,7 +38,7 @@ SUBMISSION_STATUS_CHOICES = [
     ('FLAGGED', 'Flagged'),
 ]
 
-# Submission types that require an uploaded artifact (not a code repository URL).
+# Submission types that require an uploaded artifact.
 FILE_SUBMISSION_TYPES = frozenset(
     {'DOCUMENT', 'DESIGN', 'PDF', 'WORD', 'SPREADSHEET'},
 )
@@ -49,7 +49,7 @@ EVALUATION_DECISION_CHOICES = [
     ('NEEDS_MENTOR_REVIEW', 'Needs Mentor Review'),
 ]
 
-# FR3 separated feeds: how the row was produced (nullable for legacy / admin rows).
+# AI recommendation provenance (null for legacy or admin-created rows).
 RECOMMENDATION_SOURCE_CHOICES = [
     ('COLD_START', 'Cold start'),
     ('CONTENT_BASED', 'Content based'),
@@ -167,7 +167,7 @@ class StudentProjectAssignment(models.Model):
         choices=RECOMMENDATION_SOURCE_CHOICES,
         null=True,
         blank=True,
-        help_text='FR3 feed: cold start, tag/content similarity, or collaborative filtering.',
+        help_text='Cold start, content/tag match, or collaborative filtering.',
     )
     assigned_at = models.DateTimeField(auto_now_add=True)
     accepted_at = models.DateTimeField(null=True, blank=True)

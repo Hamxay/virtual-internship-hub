@@ -1,7 +1,4 @@
-"""
-Rule-based domain ranking from per-domain assessment scores (no ML).
-Highest percentage (earned points / total points) wins; ties broken by lower domain id.
-"""
+"""Pick best domain from per-domain score totals (no ML); ties → lower id."""
 from typing import Any, Dict, List, Optional
 
 # Per-domain: (score, total_points) -> percentage
@@ -52,7 +49,8 @@ def recommend_rule_based_with_explanation(
         )
     ranked.sort(key=lambda x: (-x['percentage'], x['domain_id']))
 
-    top_k = ranked[:3]
+    # Include every domain that had scored questions (composed tests use up to 3 domains).
+    top_k = ranked
 
     if recommended_id is None:
         explanation = (

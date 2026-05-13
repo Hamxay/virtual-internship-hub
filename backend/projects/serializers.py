@@ -17,7 +17,6 @@ from .models import (
 )
 
 
-# FR4 uploads — align with extractor-supported document and artifact types
 MAX_SUBMISSION_UPLOAD_BYTES = 15 * 1024 * 1024
 ALLOWED_SUBMISSION_UPLOAD_SUFFIXES = frozenset({
     '.pdf', '.doc', '.docx', '.xlsx', '.xls', '.txt',
@@ -57,9 +56,9 @@ class EvaluationRubricSerializer(serializers.ModelSerializer):
         )
 
     def validate_criteria(self, value):
-        items = value or DEFAULT_RUBRIC_CRITERIA
+        criteria_items = value or DEFAULT_RUBRIC_CRITERIA
         total_weight = 0
-        for item in items:
+        for item in criteria_items:
             if not isinstance(item, dict):
                 raise serializers.ValidationError('Each rubric criterion must be an object.')
             if not item.get('key') or not item.get('label'):
@@ -70,7 +69,7 @@ class EvaluationRubricSerializer(serializers.ModelSerializer):
             total_weight += weight
         if total_weight <= 0:
             raise serializers.ValidationError('Rubric criteria must have a total weight above 0.')
-        return items
+        return criteria_items
 
 
 class ProjectTemplateSerializer(serializers.ModelSerializer):
@@ -144,9 +143,12 @@ class ProjectTemplateSerializer(serializers.ModelSerializer):
 
 
 class SubmissionEvaluationSerializer(serializers.ModelSerializer):
-    """Includes ``extracted_tags`` from FR4 payload (stored on ``rubric_scores`` / submission metadata)."""
+    """Surfaces model tags and plagiarism similarity % alongside stored rubric JSON."""
 
     extracted_tags = serializers.SerializerMethodField()
+    plagiarism_similarity_percent = serializers.SerializerMethodField(
+        help_text='Plagiarism similarity % from evaluation data or submission metadata.',
+    )
 
     class Meta:
         model = SubmissionEvaluation
@@ -158,6 +160,7 @@ class SubmissionEvaluationSerializer(serializers.ModelSerializer):
             'originality_score',
             'grammar_score',
             'design_quality_score',
+            'plagiarism_similarity_percent',
             'rubric_scores',
             'strengths',
             'improvements',
@@ -172,18 +175,56 @@ class SubmissionEvaluationSerializer(serializers.ModelSerializer):
         )
 
     def get_extracted_tags(self, obj):
-        rs = obj.rubric_scores if isinstance(obj.rubric_scores, dict) else {}
-        raw = rs.get('extracted_tags')
+        rubric_scores = obj.rubric_scores if isinstance(obj.rubric_scores, dict) else {}
+        raw = rubric_scores.get('extracted_tags')
         if isinstance(raw, list):
             out = [str(t).strip() for t in raw if str(t).strip()]
             if out:
                 return out
         if obj.submission_id:
             meta = getattr(obj.submission, 'metadata', None) or {}
-            alt = meta.get('fr4_extracted_tags')
+            alt = meta.get('extracted_tags')
+            if not isinstance(alt, list):
+                alt = meta.get('fr4_extracted_tags')
             if isinstance(alt, list):
                 return [str(t).strip() for t in alt if str(t).strip()]
         return []
+
+    def get_plagiarism_similarity_percent(self, obj):
+        rubric_scores = obj.rubric_scores if isinstance(obj.rubric_scores, dict) else {}
+        if obj.model_name in {'local_plagiarism_gatekeeper', 'copyleaks_plagiarism_gatekeeper'}:
+            v = rubric_scores.get('similarity_percent')
+            if v is not None:
+                try:
+                    return round(float(v), 2)
+                except (TypeError, ValueError):
+                    pass
+        model_json = rubric_scores.get('model_json') if isinstance(rubric_scores, dict) else None
+        if isinstance(model_json, dict):
+            v = model_json.get('plagiarism_similarity_percent')
+            if v is not None:
+                try:
+                    return round(float(v), 2)
+                except (TypeError, ValueError):
+                    pass
+        v = rubric_scores.get('plagiarism_similarity_percent')
+        if v is not None:
+            try:
+                return round(float(v), 2)
+            except (TypeError, ValueError):
+                pass
+        if not obj.submission_id:
+            return None
+        meta = getattr(obj.submission, 'metadata', None) or {}
+        raw = meta.get('plagiarism_similarity_percent')
+        if raw in (None, ''):
+            raw = meta.get('copyleaks_similarity_percent')
+        if raw is None or raw == '':
+            return None
+        try:
+            return round(float(raw), 2)
+        except (TypeError, ValueError):
+            return None
 
 
 class ProjectSubmissionSerializer(serializers.ModelSerializer):
@@ -298,6 +339,9 @@ class ProjectSubmissionCreateSerializer(serializers.ModelSerializer):
 class StudentProjectAssignmentSerializer(serializers.ModelSerializer):
     project_template = ProjectTemplateSerializer(read_only=True)
     latest_submission = serializers.SerializerMethodField()
+    plagiarism = serializers.SerializerMethodField(
+        help_text='Aggregated plagiarism similarity summary across submission versions.',
+    )
 
     class Meta:
         model = StudentProjectAssignment
@@ -317,11 +361,49 @@ class StudentProjectAssignmentSerializer(serializers.ModelSerializer):
             'latest_evaluation_score',
             'latest_feedback_summary',
             'latest_submission',
+            'plagiarism',
         )
 
     def get_latest_submission(self, obj):
         latest = obj.latest_submission
         return ProjectSubmissionSerializer(latest).data if latest else None
+
+    def get_plagiarism(self, obj):
+        latest = obj.latest_submission
+        if not latest:
+            return {
+                'similarity_percent': None,
+                'scan_status': 'not_available',
+                'source_submission_id': None,
+            }
+        meta = latest.metadata if isinstance(latest.metadata, dict) else {}
+        raw = meta.get('plagiarism_similarity_percent')
+        if raw in (None, ''):
+            raw = meta.get('copyleaks_similarity_percent')
+        value = None
+        if raw not in (None, ''):
+            try:
+                value = round(float(raw), 2)
+            except (TypeError, ValueError):
+                value = None
+        explicit_status = str(
+            meta.get('plagiarism_status')
+            or meta.get('copyleaks_scan_status')
+            or ''
+        ).strip().lower()
+        if value is not None:
+            scan_status = 'completed'
+        elif explicit_status:
+            scan_status = explicit_status
+        elif latest.status == 'SUBMITTED':
+            scan_status = 'submitted'
+        else:
+            scan_status = 'not_available'
+        return {
+            'similarity_percent': value,
+            'scan_status': scan_status,
+            'source_submission_id': latest.id,
+        }
 
 
 class AdminAssignProjectSerializer(serializers.Serializer):

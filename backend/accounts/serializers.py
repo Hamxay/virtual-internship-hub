@@ -40,27 +40,37 @@ class StudentProfileForMentorListSerializer(StudentProfileSerializer):
     Student list row for mentors: adds domain-scoped progress metrics (prefetched on the view).
     """
 
+    username = serializers.CharField(source='user.username', read_only=True)
+    student_id = serializers.IntegerField(source='user.id', read_only=True)
     domain_average = serializers.SerializerMethodField()
     projects_completed = serializers.SerializerMethodField()
     is_at_risk = serializers.SerializerMethodField()
     skill_insights = serializers.SerializerMethodField()
     latest_feedback_summary = serializers.SerializerMethodField()
+    activity_summary = serializers.SerializerMethodField()
 
     class Meta(StudentProfileSerializer.Meta):
         fields = (
             *StudentProfileSerializer.Meta.fields,
+            'username',
+            'student_id',
             'domain_average',
             'projects_completed',
             'is_at_risk',
             'skill_insights',
             'latest_feedback_summary',
+            'activity_summary',
         )
 
-    def _completed_domain_assignments(self, obj):
+    def _all_domain_assignments(self, obj):
         user = getattr(obj, 'user', None)
         if user is None:
             return []
-        return getattr(user, '_prefetched_completed_domain_assignments', None) or []
+        return getattr(user, '_mentor_domain_assignments_all', None) or []
+
+    def _completed_domain_assignments(self, obj):
+        completed = [a for a in self._all_domain_assignments(obj) if a.status == 'COMPLETED']
+        return sorted(completed, key=lambda a: ((a.completed_at or a.assigned_at), a.id))
 
     def _mentor_domain_metrics(self, obj):
         """Compute once per instance (serializer may call getters separately)."""
@@ -112,6 +122,56 @@ class StudentProfileForMentorListSerializer(StudentProfileSerializer):
         _, _, _, latest_feedback = self._mentor_domain_metrics(obj)
         return latest_feedback or ''
 
+    def get_activity_summary(self, obj):
+        """Active and last completed project in the mentor's domain (from prefetched assignments)."""
+        user = getattr(obj, 'user', None)
+        if user is None:
+            return None
+        recent = self._all_domain_assignments(obj)
+        if not recent:
+            return {
+                'current_project_title': None,
+                'current_status': None,
+                'last_completed_project_title': None,
+                'last_completed_at': None,
+            }
+        status_labels = {
+            'RECOMMENDED': 'Recommended',
+            'IN_PROGRESS': 'In Progress',
+            'SUBMITTED': 'Submitted',
+            'NEEDS_REVISION': 'Needs Revision',
+            'PENDING_MENTOR_REVIEW': 'Pending Mentor Review',
+            'COMPLETED': 'Completed',
+        }
+        active_statuses = (
+            'RECOMMENDED',
+            'IN_PROGRESS',
+            'SUBMITTED',
+            'NEEDS_REVISION',
+            'PENDING_MENTOR_REVIEW',
+        )
+        in_progress = next((a for a in recent if a.status in active_statuses), None)
+        completed = [a for a in recent if a.status == 'COMPLETED']
+        last_done = None
+        if completed:
+            last_done = max(completed, key=lambda a: ((a.completed_at or a.assigned_at), a.id))
+        return {
+            'current_project_title': (
+                in_progress.project_template.title if in_progress else None
+            ),
+            'current_status': (
+                status_labels.get(in_progress.status, in_progress.status)
+                if in_progress
+                else None
+            ),
+            'last_completed_project_title': (
+                last_done.project_template.title if last_done else None
+            ),
+            'last_completed_at': (
+                last_done.completed_at.isoformat() if last_done and last_done.completed_at else None
+            ),
+        }
+
     def get_skill_insights(self, obj):
         """
         Domain-scoped growth insight for mentor list rows.
@@ -133,7 +193,7 @@ class StudentProfileForMentorListSerializer(StudentProfileSerializer):
         if len(assignments) < 2:
             return None
 
-        ordered_assignments = sorted(assignments, key=lambda asn: ((asn.completed_at or asn.updated_at), asn.id))
+        ordered_assignments = sorted(assignments, key=lambda asn: ((asn.completed_at or asn.assigned_at), asn.id))
         chronological_scores = []
 
         for asn in ordered_assignments:
@@ -396,8 +456,6 @@ class ResetPasswordSerializer(serializers.Serializer):
             raise serializers.ValidationError({'new_password_confirm': 'Passwords do not match.'})
         return attrs
 
-
-# --------------- Admin: list students/mentors (no administrator users) ---------------
 
 class AdminStudentListItemSerializer(serializers.ModelSerializer):
     """For admin panel: student user + profile. Only used for role=STUDENT."""

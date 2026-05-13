@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { getAdminAnalytics } from '../../api/reports.api';
 import AnalyticsCharts from '../../components/admin/AnalyticsCharts';
+import StudentPerformanceOverviewChart from '../../components/admin/StudentPerformanceOverviewChart';
 import StudentDomainHeatmapTable from '../../components/admin/StudentDomainHeatmapTable';
 import {
   buildStudentMatrixCsv,
@@ -11,9 +12,7 @@ import {
 } from '../../utils/commandCenterAnalytics';
 import './StudentAnalytics.css';
 
-/**
- * Student Analytics — platform KPIs, domain heatmap (smart sparse columns), FR8 matrix CSV export.
- */
+/** Admin student matrix: KPIs, heatmap, CSV export. */
 export default function StudentAnalytics() {
   const [studentSearch, setStudentSearch] = useState('');
   const [analyticsData, setAnalyticsData] = useState(null);
@@ -77,8 +76,10 @@ export default function StudentAnalytics() {
       <header className="admin-command-center-header">
         <h1>Student Analytics & Compliance Audit</h1>
         <p>
-          Domain-centric score matrix with heatmap styling. Export CSV matches the filtered table (FR8 raw
-          audit for the visible cohort).
+          Full cohort progress: each student&apos;s <strong>target domains</strong> (profile selection),
+          <strong>average score within those domains</strong> from completed work, and per-domain heatmap
+          columns. Chosen domains are outlined in the matrix. CSV export includes the same columns. The bar chart
+          uses the same averages so you can see at a glance how each student performs.
         </p>
       </header>
 
@@ -102,7 +103,7 @@ export default function StudentAnalytics() {
 
             <section className="command-center-heatmap-section" aria-label="Student domain matrix">
               <div className="command-center-heatmap-toolbar">
-                <h2 className="admin-command-center-audit-title">Student domain performance</h2>
+                <h2 className="admin-command-center-audit-title">Student progress by target domain</h2>
                 <div className="command-center-heatmap-actions">
                   <label htmlFor="student-matrix-search" className="sr-only">
                     Filter by student name
@@ -127,9 +128,15 @@ export default function StudentAnalytics() {
                 </div>
               </div>
               <p className="command-center-heatmap-hint text-sm text-gray-500">
-                Columns appear only when at least one visible student has a score in that domain. Empty cells are
-                not enrolled or no completed score in that domain.
+                The <strong>performance chart</strong> in this section matches the table averages.{' '}
+                <strong>Avg (targets)</strong> is the mean of scores only in domains the student chose, where they
+                have completed evaluated work. Domain columns appear when any visible student has data there;
+                cells with an indigo outline are that student&apos;s selected targets. Empty cells mean no completed
+                score in that domain yet.
               </p>
+
+              <StudentPerformanceOverviewChart studentRows={filteredRows} />
+
               <StudentDomainHeatmapTable rows={filteredRows} domainColumns={visibleDomainColumns} />
             </section>
           </div>

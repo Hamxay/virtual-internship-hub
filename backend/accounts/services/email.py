@@ -1,6 +1,4 @@
-"""
-Send emails via SMTP. Used for password reset OTP and signup verification.
-"""
+"""SMTP helpers for signup and password-reset OTP."""
 import random
 import string
 from django.conf import settings

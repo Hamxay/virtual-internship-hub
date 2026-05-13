@@ -4,6 +4,7 @@ from .views import (
     AdminEvaluationSummaryView,
     AdminPendingSubmissionsView,
     AdminProjectAssignView,
+    CopyleaksWebhookView,
     AdminProjectTemplateDetailView,
     AdminProjectTemplateListCreateView,
     StudentAcceptProjectView,
@@ -27,4 +28,5 @@ urlpatterns = [
     path('student/projects/<int:pk>/accept/', StudentAcceptProjectView.as_view(), name='student-project-accept'),
     path('student/assignments/<int:pk>/submissions/', StudentSubmissionCreateView.as_view(), name='student-submission-create'),
     path('student/submissions/<int:pk>/feedback/', StudentSubmissionFeedbackView.as_view(), name='student-submission-feedback'),
+    path('projects/copyleaks/webhook/<str:status_name>/<str:scan_id>/', CopyleaksWebhookView.as_view(), name='copyleaks-webhook'),
 ]

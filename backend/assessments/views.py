@@ -3,7 +3,6 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.db.models import Count
 from accounts.permissions import IsAdministrator, IsStudent
-from accounts.models import Domain
 from .models import AssessmentQuestion, StudentAssessmentAttempt
 from .serializers import (
     AssessmentQuestionSerializer,
@@ -24,8 +23,6 @@ from .services import (
 )
 from .pagination import DomainQuestionPagination
 
-
-# --------------- Admin: questions per domain ---------------
 
 class AdminDomainQuestionListCreateView(generics.ListCreateAPIView):
     """GET/POST admin/domains/<domain_id>/questions/ – List or add MCQs for a domain (admin only). 5 per page."""
@@ -76,8 +73,6 @@ class AdminDomainQuestionCountsView(APIView):
         )
         return Response([{'domain_id': c['domain_id'], 'question_count': c['question_count']} for c in counts])
 
-
-# --------------- Student: composed assessment only ---------------
 
 def _attempts_today(user):
     """Count attempts submitted today (global per user, not per target domain)."""

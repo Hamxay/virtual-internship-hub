@@ -1,19 +1,15 @@
-"""
-ASGI / Channels middleware: JWT from WebSocket query string (?token=...).
-HTTP Authorization headers are not available on browsers' WebSocket API.
-"""
+"""Channels: authenticate WebSocket connections with ``?token=<JWT>`` (no Authorization header)."""
 from urllib.parse import parse_qs
 
-from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
-from django.contrib.auth.models import AnonymousUser
-from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from rest_framework_simplejwt.tokens import AccessToken
 
 
 @database_sync_to_async
 def _user_from_access_token(token_key: str):
     from django.contrib.auth import get_user_model
+    from django.contrib.auth.models import AnonymousUser
+    from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+    from rest_framework_simplejwt.tokens import AccessToken
 
     User = get_user_model()
     if not token_key:

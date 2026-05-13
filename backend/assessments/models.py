@@ -1,7 +1,4 @@
-"""
-Skill assessment models. Domain and User live in accounts.
-Questions are per-domain; no separate SkillAssessment container.
-"""
+"""MCQs and student assessment attempts (users/domains live in ``accounts``)."""
 import uuid
 
 from django.conf import settings

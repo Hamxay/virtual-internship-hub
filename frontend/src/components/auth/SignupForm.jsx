@@ -132,6 +132,7 @@ function SignupForm({
                 onChange={onTargetDomainIdsChange}
                 placeholder={domainsLoading ? 'Loading domains…' : 'Select 2 to 3 areas of interest'}
                 disabled={loading || domainsLoading}
+                maxSelected={3}
               />
               {domainsError && (
                 <p className="mt-1 text-red-600 text-xs">

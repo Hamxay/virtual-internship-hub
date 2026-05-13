@@ -4284,7 +4284,7 @@
   color: #64748b;
 }
 
-/* FR4 — AI evaluation in progress */
+/* AI evaluation in progress */
 .student-task-ai-evaluating {
   display: inline-flex;
   align-items: center;
@@ -4424,7 +4424,7 @@
   }
 }
 
-/* ===== FR10 Notification Bell ===== */
+/* Notification bell */
 
 .notif-bell-wrap {
   position: relative;

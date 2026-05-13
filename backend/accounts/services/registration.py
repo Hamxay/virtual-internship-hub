@@ -1,17 +1,9 @@
-"""
-Create User and profile from verified signup payload (after OTP verification).
-Used only by VerifySignupAndRegisterView.
-"""
+"""Create ``User`` + role profile after signup OTP verification."""
 from ..models import User, Domain
 
 
 def create_user_from_verified_signup_payload(payload):
-    """
-    Create User and StudentProfile/MentorProfile from a verified signup payload.
-    Caller must ensure payload came from verify_signup_otp_and_get_payload.
-    Sets is_email_verified=True.
-    Returns the created User.
-    """
+    """Build user from OTP-verified payload; sets ``is_email_verified``."""
     data = dict(payload)
     data.pop('password_confirm', None)
     role = data.pop('role', 'STUDENT')

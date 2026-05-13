@@ -1,7 +1,4 @@
-/**
- * Admin Dashboard – FR8 (user/project/report management), FR10 (project templates & evaluation criteria).
- * Sections: Dashboard overview, Users (students/mentors only), Skill Assessments, Project Templates, Reports (routed).
- */
+/** Admin shell: users, assessments, templates, reports. */
 import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';

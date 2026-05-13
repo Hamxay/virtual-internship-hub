@@ -1,3 +1,1 @@
-from django.test import TestCase
-
-# FR5 API tests can be added here.
+"""Tests for mentor app (add test cases here)."""

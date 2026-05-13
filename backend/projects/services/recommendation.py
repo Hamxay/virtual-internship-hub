@@ -10,10 +10,7 @@ from projects.services.hybrid_recommender import HybridRecommender, resolve_reco
 
 
 def _successful_tags_from_completed_assignments(assignments):
-    """
-    Union of ``ProjectTemplate.tags`` for COMPLETED assignments, de-duplicated
-    (case-insensitive), order preserved by first occurrence.
-    """
+    """Distinct template tags from completed work, first-seen order, case-folded uniqueness."""
     seen = set()
     out = []
     for assignment in assignments:
@@ -47,11 +44,8 @@ COMPLEXITY_RANK = {
 }
 
 
-def apply_fr4_recommended_difficulty_if_higher(student, recommended_raw: str) -> None:
-    """
-    After FR4 evaluation, raise ``StudentProgressSnapshot.current_complexity_band``
-    when the model recommends a strictly higher difficulty than the refreshed snapshot band.
-    """
+def apply_recommended_difficulty_if_higher(student, recommended_raw: str) -> None:
+    """Bump the learner's complexity band when the model suggests a harder level than the snapshot."""
     rec = str(recommended_raw or 'BEGINNER').upper().strip()
     if rec not in COMPLEXITY_RANK:
         rec = 'BEGINNER'
@@ -67,7 +61,7 @@ def apply_fr4_recommended_difficulty_if_higher(student, recommended_raw: str) ->
     prev_meta = snapshot.metadata if isinstance(snapshot.metadata, dict) else {}
     snapshot.metadata = {
         **prev_meta,
-        'fr4_recommended_next_difficulty': rec,
+        'recommended_next_difficulty': rec,
     }
     snapshot.save(update_fields=['current_complexity_band', 'metadata', 'updated_at'])
 
@@ -153,10 +147,7 @@ def _build_content_feed_reason(template, breakdown: dict) -> str:
 
 
 def refresh_recommended_assignments(student, limit=None):
-    """
-    FR3 wipe-and-replace: delete all RECOMMENDED rows, then create separated feeds
-    (content vs collaborative) with ``recommendation_source`` set.
-    """
+    """Replace all RECOMMENDED rows with a fresh content-based and collaborative feed."""
     snapshot = update_student_progress_snapshot(student)
     if limit is None:
         limit = resolve_recommendation_top_n(student, snapshot)

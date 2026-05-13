@@ -1,6 +1,4 @@
-"""
-All API views in one file. Sections: Auth, Student, Mentor, Admin, Domains.
-"""
+"""Account API: auth, student/mentor profiles, admin user lists, domains."""
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status, generics, permissions
 from rest_framework.views import APIView
@@ -59,11 +57,9 @@ def tokens_and_user_response(user):
     }
 
 
-# --------------- Auth ---------------
-
-
 class SendSignupOTPView(APIView):
     """POST auth/register/send-otp/ – Validate signup data, store pending, send 6-digit OTP to email."""
+    authentication_classes = []
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
@@ -86,6 +82,7 @@ class SendSignupOTPView(APIView):
 
 class VerifySignupAndRegisterView(APIView):
     """POST auth/register/verify/ – Verify OTP and create account (User + profile)."""
+    authentication_classes = []
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
@@ -100,7 +97,7 @@ class VerifySignupAndRegisterView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
-            user = create_user_from_verified_signup_payload(payload)
+            create_user_from_verified_signup_payload(payload)
         except Exception as e:
             return Response(
                 {'detail': str(e)},
@@ -112,6 +109,7 @@ class VerifySignupAndRegisterView(APIView):
 
 class LoginView(APIView):
     """POST auth/login/ – Login with email/password. Returns JWT tokens."""
+    authentication_classes = []
     permission_classes = [permissions.AllowAny]
 
     @extend_schema(
@@ -158,6 +156,7 @@ class LogoutView(APIView):
 
 
 class SendPasswordResetOTPView(APIView):
+    authentication_classes = []
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
@@ -172,6 +171,7 @@ class SendPasswordResetOTPView(APIView):
 
 
 class VerifyPasswordResetOTPView(APIView):
+    authentication_classes = []
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
@@ -187,6 +187,7 @@ class VerifyPasswordResetOTPView(APIView):
 
 
 class ResetPasswordView(APIView):
+    authentication_classes = []
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
@@ -214,6 +215,7 @@ class ResetPasswordView(APIView):
 
 
 class ResendPasswordResetOTPView(APIView):
+    authentication_classes = []
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
@@ -235,8 +237,6 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
     def get_object(self):
         return self.request.user
 
-
-# --------------- Student ---------------
 
 class StudentProfileView(generics.RetrieveUpdateAPIView):
     """GET/PUT students/profile/ – Student profile (students only)."""
@@ -282,13 +282,12 @@ class StudentListView(generics.ListAPIView):
             if not profile or not profile.expertise_domain_id:
                 return StudentProfile.objects.none()
             domain_id = profile.expertise_domain_id
-            completed_in_domain = (
+            assignments_in_domain = (
                 StudentProjectAssignment.objects.filter(
-                    status='COMPLETED',
                     project_template__domain_id=domain_id,
                 )
                 .select_related('project_template', 'project_template__domain')
-                .order_by('completed_at', 'id')
+                .order_by('-assigned_at', '-id')
                 .prefetch_related(
                     Prefetch(
                         'submissions',
@@ -305,16 +304,14 @@ class StudentListView(generics.ListAPIView):
                     'target_domains',
                     Prefetch(
                         'user__project_assignments',
-                        queryset=completed_in_domain,
-                        to_attr='_prefetched_completed_domain_assignments',
+                        queryset=assignments_in_domain,
+                        to_attr='_mentor_domain_assignments_all',
                     ),
                 )
                 .distinct()
             )
         return StudentProfile.objects.none()
 
-
-# --------------- Mentor ---------------
 
 class MentorProfileView(generics.RetrieveUpdateAPIView):
     """GET/PUT mentors/profile/ – Mentor profile (mentors only)."""
@@ -344,8 +341,6 @@ class MentorListView(generics.ListAPIView):
         return MentorProfile.objects.all()
 
 
-# --------------- Admin ---------------
-
 class CreateAdministratorView(generics.CreateAPIView):
     """POST admin/administrators/ – Create administrator (superuser only)."""
     permission_classes = [permissions.IsAuthenticated, IsSuperuser]
@@ -354,7 +349,7 @@ class CreateAdministratorView(generics.CreateAPIView):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.save()
+        serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -372,8 +367,6 @@ class AdminMentorListView(generics.ListAPIView):
     queryset = User.objects.filter(role='MENTOR').select_related('mentor_profile', 'mentor_profile__expertise_domain')
 
 
-# --------------- Domains (shared) ---------------
-
 class DomainListView(generics.ListAPIView):
     """GET domains/ – List domains (public, unpaginated)."""
     serializer_class = DomainSerializer
@@ -381,8 +374,6 @@ class DomainListView(generics.ListAPIView):
     queryset = Domain.objects.all()
     pagination_class = None
 
-
-# --------------- Admin: Domain CRUD ---------------
 
 class AdminDomainPagination(PageNumberPagination):
     page_size = 10

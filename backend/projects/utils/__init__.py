@@ -1,1 +1,1 @@
-"""Project utilities (FR4 evaluation helpers)."""
+"""Shared helpers for project evaluation and document handling."""

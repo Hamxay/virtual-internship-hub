@@ -1,4 +1,4 @@
-"""Extract text from supported local file paths for FR4 evaluation."""
+"""Extract text from local uploads for the evaluation pipeline."""
 from __future__ import annotations
 
 import logging
@@ -8,7 +8,11 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-BINARY_SUFFIXES = frozenset({'.pdf', '.png', '.jpg', '.jpeg', '.webp', '.gif'})
+# Images: no text extraction; PDF handled separately.
+IMAGE_SUFFIXES = frozenset({'.png', '.jpg', '.jpeg', '.webp', '.gif'})
+
+MAX_PDF_PAGES = 40
+MAX_PDF_CHARS = 100_000
 
 
 @dataclass
@@ -26,7 +30,8 @@ class UniversalDocumentExtractor:
 
         - ``.csv`` / ``.xlsx`` / ``.xls``: first 100 rows as a Markdown-like table.
         - ``.docx``: paragraph text.
-        - ``.pdf`` / images: note binary artifact presence in text.
+        - ``.pdf``: extract text with pypdf (page/character caps).
+        - images: note binary artifact presence in text.
         """
         path = Path(file_path)
         suffix = path.suffix.lower()
@@ -46,7 +51,10 @@ class UniversalDocumentExtractor:
             if suffix == '.docx':
                 outcome.text_markdown = UniversalDocumentExtractor._docx_to_text(path)
                 return outcome
-            if suffix in BINARY_SUFFIXES:
+            if suffix == '.pdf':
+                outcome.text_markdown = UniversalDocumentExtractor._pdf_to_text(path)
+                return outcome
+            if suffix in IMAGE_SUFFIXES:
                 outcome.text_markdown = (
                     f'## Binary artifact received: {path.name}\n\n'
                     'Binary file content is not directly extractable. '
@@ -90,4 +98,68 @@ class UniversalDocumentExtractor:
         document = Document(str(path))
         paragraphs = [p.text.strip() for p in document.paragraphs if p.text and p.text.strip()]
         return '\n'.join(paragraphs)
+
+    @staticmethod
+    def _pdf_to_text(path: Path) -> str:
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            logger.warning('pypdf not installed; skipping PDF text extraction for %s', path.name)
+            return (
+                f'## PDF: {path.name}\n\n'
+                '(PDF text extraction is unavailable on this server.)'
+            )
+
+        try:
+            reader = PdfReader(str(path))
+        except Exception as exc:
+            logger.warning('PdfReader failed for %s: %s', path, exc)
+            return f'## PDF: {path.name}\n\n(Could not open PDF: {exc})'
+
+        if reader.is_encrypted:
+            try:
+                reader.decrypt('')
+            except Exception:
+                return f'## PDF: {path.name}\n\n(PDF is password-protected; text was not extracted.)'
+
+        pages = reader.pages
+        parts: list[str] = []
+        total_chars = 0
+        truncated = False
+        for i, page in enumerate(pages[:MAX_PDF_PAGES]):
+            try:
+                raw = page.extract_text() or ''
+            except Exception as exc:
+                logger.debug('PDF page %s extract failed: %s', i, exc)
+                continue
+            chunk = raw.strip()
+            if not chunk:
+                continue
+            remaining = MAX_PDF_CHARS - total_chars
+            if remaining <= 0:
+                truncated = True
+                break
+            if len(chunk) > remaining:
+                chunk = chunk[:remaining]
+                truncated = True
+            parts.append(chunk)
+            total_chars += len(chunk)
+            if truncated:
+                break
+
+        body = '\n\n'.join(parts).strip()
+        extra_pages = len(pages) - min(len(pages), MAX_PDF_PAGES)
+        notes: list[str] = []
+        if extra_pages > 0:
+            notes.append(f'{extra_pages} additional page(s) not scanned (limit {MAX_PDF_PAGES}).')
+        if truncated:
+            notes.append('Content truncated to character limit for evaluation.')
+
+        if not body:
+            return (
+                f'## PDF: {path.name}\n\n'
+                '(No extractable text; the file may be scanned/image-only or use an unsupported layout.)'
+            )
+        suffix = '\n\n' + ' '.join(notes) if notes else ''
+        return f'## PDF: {path.name}\n\n{body}{suffix}'
 

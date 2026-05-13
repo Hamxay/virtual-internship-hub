@@ -1,10 +1,4 @@
-"""
-Scikit-learn RandomForest domain classifier: primary domain + class probabilities.
-
-Consumes per-domain percentages (0–100), outputs weights for StudentAssessmentAttempt.recommendation_meta.
-
-Training: fit() on real data, or fit_dummy_synthetic() for cold start per domain-id set.
-"""
+"""RandomForest over per-domain percentages → primary domain + weights for ``recommendation_meta``."""
 from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
@@ -178,13 +172,9 @@ class DomainAptitudeClassifier:
             )
         entries.sort(key=lambda e: (-e["weight_percent"], e["domain_id"]))
 
-        parts = [
-            f"{e['weight_percent']:.0f}% {e['domain_name']}"
-            for e in entries
-            if e["weight_percent"] >= 1.0
-        ]
-        if not parts:
-            parts = [f"{entries[0]['weight_percent']:.0f}% {entries[0]['domain_name']}"]
+        # Always list every class so a 3-domain test never hides the weakest bucket
+        # (previously entries under 1% were omitted and the profile looked 2-way only).
+        parts = [f"{e['weight_percent']:.1f}% {e['domain_name']}" for e in entries]
 
         return {
             "ml_primary_domain_id": primary,

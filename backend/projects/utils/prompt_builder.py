@@ -1,13 +1,13 @@
-"""
-Strict 4-layer prompts for FR4 LLM evaluation — submission-type-aware.
-"""
+"""Build system + user prompts for automated project grading (per submission type)."""
 from __future__ import annotations
 
 import json
 import re
 from typing import Any
 
-EMPTY_CONTENT_MARKER = '(No extractable student content.)'
+from projects.services.evaluation_gatekeepers import EMPTY_SUBMISSION_PLACEHOLDER
+
+EMPTY_CONTENT_MARKER = EMPTY_SUBMISSION_PLACEHOLDER
 
 _CODE_SYSTEM = (
     'You are a Senior Software Engineer and Technical Mentor evaluating a student code project.\n'
@@ -32,6 +32,15 @@ _BINARY_SYSTEM = (
     'Respond with strictly valid raw JSON only — no markdown fences, no commentary.'
 )
 
+_DESIGN_VISION_SYSTEM = (
+    'You are a Senior Technical Mentor evaluating a UI/UX or graphic design submission.\n'
+    'The student content includes an **Automated visual analysis** section produced by a vision model from their image. '
+    'Use that analysis together with their notes and submission text. '
+    'Judge alignment with deliverables, clarity, and professionalism; be specific in your feedback.\n'
+    'If the automated analysis conflicts with written requirements, weight the assignment context and written rationale.\n'
+    'Respond with strictly valid raw JSON only — no markdown fences, no commentary.'
+)
+
 _DEFAULT_SYSTEM = (
     'You are a Senior Technical Mentor evaluating a student project submission.\n'
     'You must be fair, specific, and constructive. Base every judgment only on the '
@@ -40,12 +49,17 @@ _DEFAULT_SYSTEM = (
 )
 
 
-def _system_for_type(submission_type: str) -> str:
+VISION_ANALYSIS_MARKER = '## Automated visual analysis (model-assisted)'
+
+
+def _system_for_type(submission_type: str, student_content: str = '') -> str:
     t = (submission_type or '').upper().strip()
     if t == 'CODE':
         return _CODE_SYSTEM
     if t in ('DOCUMENT', 'WORD', 'SPREADSHEET'):
         return _DOCUMENT_SYSTEM
+    if t == 'DESIGN' and VISION_ANALYSIS_MARKER in (student_content or ''):
+        return _DESIGN_VISION_SYSTEM
     if t in ('PDF', 'DESIGN'):
         return _BINARY_SYSTEM
     return _DEFAULT_SYSTEM
@@ -73,7 +87,7 @@ def build_evaluation_prompt(project_template: Any, student_content: str) -> tupl
     4. Output instructions — exact JSON schema, raw JSON only.
     """
     submission_type = getattr(project_template, 'submission_type', '') or ''
-    system = _system_for_type(submission_type)
+    system = _system_for_type(submission_type, student_content)
 
     instruction = getattr(project_template, 'instruction', None)
     rubric = getattr(project_template, 'rubric', None)

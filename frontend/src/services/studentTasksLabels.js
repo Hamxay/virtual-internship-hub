@@ -33,6 +33,21 @@ export function handInTypeLabel(submissionType) {
   return SUBMISSION_TYPE_LABELS[submissionType] || submissionType;
 }
 
+/** Label for the optional “submitted_files” lines field in the submit modal (maps to backend JSON array). */
+export function submissionPathNotesLabel(submissionType) {
+  if (submissionType === 'CODE') return 'Important files or paths in your ZIP';
+  if (submissionType === 'DESIGN') return 'Design files or layers to highlight';
+  if (submissionType === 'SPREADSHEET') return 'Sheets or cell ranges to highlight';
+  return 'Sections or pages to highlight';
+}
+
+export function submissionPathNotesHint(submissionType) {
+  if (submissionType === 'CODE') return 'One per line (optional), e.g. src/app.py';
+  if (submissionType === 'DESIGN') return 'One per line (optional), e.g. cover.png, slide-3';
+  if (submissionType === 'SPREADSHEET') return 'One per line (optional), e.g. Summary!A1:D10';
+  return 'One per line (optional), e.g. Section 2, page 4, Appendix A';
+}
+
 /** Difficulty band from template. */
 export function levelLabel(complexity) {
   if (!complexity) return '';

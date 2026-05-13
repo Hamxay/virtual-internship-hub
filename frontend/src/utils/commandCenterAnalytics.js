@@ -8,6 +8,8 @@ export const STUDENT_ROW_META_KEYS = new Set([
   'overall_average',
   'skill_insights',
   'growth_velocity',
+  'chosen_domains',
+  'chosen_domains_average',
 ]);
 
 /**
@@ -63,12 +65,22 @@ export function escapeCsvCell(value) {
  * @returns {string}
  */
 export function buildStudentMatrixCsv(rows, domainColumns) {
-  const headers = ['Student Name', ...domainColumns, 'Overall Average', 'Progress Change'];
+  const headers = [
+    'Student Name',
+    'Target domains',
+    'Avg (target domains)',
+    ...domainColumns,
+    'Overall Average',
+    'Progress Change',
+  ];
   const lines = [headers.map(escapeCsvCell).join(',')];
   for (const row of rows) {
     const velocity = readVelocityFromRow(row);
+    const chosen = Array.isArray(row.chosen_domains) ? row.chosen_domains : [];
     const cells = [
       row.username ?? '',
+      chosen.join('; '),
+      row.chosen_domains_average == null ? '' : String(row.chosen_domains_average),
       ...domainColumns.map((d) => {
         const v = row[d];
         return v == null ? '' : String(v);

@@ -1,11 +1,7 @@
 import React from 'react';
 import './AnalyticsCharts.css';
 
-/**
- * Platform KPI cards for admin analytics (FR9 headline metrics).
- *
- * @param {{ kpis?: object }} props
- */
+/** Top-row KPI cards for admin analytics. */
 export default function AnalyticsCharts({ kpis = {} }) {
   return (
     <div className="analytics-charts">

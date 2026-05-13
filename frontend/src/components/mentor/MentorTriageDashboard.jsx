@@ -38,6 +38,19 @@ function triageRank(row) {
   return 3;
 }
 
+function formatShortDate(iso) {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  } catch {
+    return null;
+  }
+}
+
 export default function MentorTriageDashboard({ students = [], loading }) {
   const [activeFilter, setActiveFilter] = useState(FILTER.ALL);
 
@@ -68,16 +81,16 @@ export default function MentorTriageDashboard({ students = [], loading }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white py-16 text-slate-500">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-600" aria-hidden />
+      <div className="flex items-center justify-center rounded-xl border border-cyan-100 bg-white/90 py-16 text-slate-500 shadow-sm shadow-cyan-100/40">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-teal-600" aria-hidden />
         <span className="ml-3 text-sm font-medium">Loading students…</span>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-      <div className="inline-flex rounded-xl bg-slate-100 p-1 ring-1 ring-slate-200">
+    <div className="space-y-4 rounded-2xl border border-cyan-100 bg-white/90 p-4 shadow-md shadow-cyan-100/40 sm:p-5">
+      <div className="inline-flex rounded-xl bg-cyan-50 p-1 ring-1 ring-cyan-100">
         <button
           type="button"
           onClick={() => setActiveFilter(FILTER.ALL)}
@@ -121,7 +134,7 @@ export default function MentorTriageDashboard({ students = [], loading }) {
       </div>
 
       {visibleStudents.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-6 py-14 text-center text-sm text-slate-600">
+        <div className="rounded-xl border border-dashed border-cyan-200 bg-cyan-50/70 px-6 py-14 text-center text-sm text-slate-600">
           No students found for this triage filter.
         </div>
       ) : (
@@ -134,47 +147,104 @@ export default function MentorTriageDashboard({ students = [], loading }) {
             const isDown = trend === 'DOWN';
             const isUp = trend === 'UP';
             const cardKey = `${student?.student_id ?? student?.username ?? idx}-${idx}`;
+            const act = student?.activity_summary || {};
+            const feedback = (student.latest_feedback_summary || '').trim();
+            const uname = (student.username || '').trim();
+            const display = studentDisplayName(student);
+            const showUsername = Boolean(uname && display !== uname);
 
             return (
               <article
                 key={cardKey}
                 className={`rounded-xl border p-5 shadow-sm ${
                   isDown
-                    ? 'border-l-4 border-red-500 bg-red-50'
+                    ? 'border-l-4 border-red-500 bg-red-50/40'
                     : isUp
-                      ? 'border-l-4 border-emerald-500 bg-emerald-50'
-                      : 'border-slate-200 bg-white'
+                      ? 'border-l-4 border-emerald-500 bg-emerald-50/40'
+                      : 'border-cyan-100 bg-cyan-50/30'
                 }`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <h3 className="text-base font-semibold text-slate-900">{studentDisplayName(student)}</h3>
-                    <p className="mt-1 text-sm text-slate-600">
-                      Current score:{' '}
-                      <span className="font-semibold text-slate-800">
-                        {student.domain_average != null ? student.domain_average : '—'}
+                    <h3 className="text-lg font-semibold text-slate-900">{studentDisplayName(student)}</h3>
+                    {showUsername ? (
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">@{uname}</p>
+                    ) : null}
+                    <div className="mt-2 flex flex-wrap gap-2 text-sm">
+                      <span className="rounded-md bg-slate-100 px-2 py-1 font-medium text-slate-800">
+                        Domain avg:{' '}
+                        {student.domain_average != null ? (
+                          <span className="tabular-nums">{student.domain_average}</span>
+                        ) : (
+                          '—'
+                        )}
                       </span>
+                      <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-700">
+                        Projects done (domain):{' '}
+                        <span className="font-semibold tabular-nums">{student.projects_completed ?? 0}</span>
+                      </span>
+                      {student.is_at_risk ? (
+                        <span className="rounded-md bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-900">
+                          Below baseline
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 text-sm text-slate-600">
+                      Trend: <span className="font-medium text-slate-800">{summary}</span>
                     </p>
-                    <p className="mt-0.5 text-sm text-slate-500">{summary}</p>
                   </div>
                   <div className="text-right">
                     <p
-                      className={`text-base font-semibold ${
+                      className={`text-lg font-semibold tabular-nums ${
                         velocity == null ? 'text-slate-500' : velocity < 0 ? 'text-red-700' : 'text-emerald-700'
                       }`}
                     >
                       {velocity == null ? '—' : `${velocity >= 0 ? '+' : ''}${velocity.toFixed(1)}%`}
                     </p>
-                    <p className="mt-0.5 text-sm text-slate-600">Recent progress</p>
+                    <p className="mt-0.5 text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Score momentum
+                    </p>
                   </div>
                 </div>
-                <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">Actionable advice</p>
-                  <p className="mt-1 text-sm leading-relaxed text-slate-700">{advice}</p>
+
+                <div className="mt-4 rounded-lg border border-teal-200/80 bg-teal-50/50 px-3 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-teal-800">Current focus (your domain)</p>
+                  {act.current_project_title ? (
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{act.current_project_title}</p>
+                  ) : (
+                    <p className="mt-1 text-sm text-slate-600">No active assignment in this domain right now.</p>
+                  )}
+                  {act.current_status ? (
+                    <span className="mt-2 inline-block rounded-full bg-white px-2.5 py-0.5 text-xs font-semibold text-teal-900 ring-1 ring-teal-200">
+                      {act.current_status}
+                    </span>
+                  ) : null}
+                  {act.last_completed_project_title ? (
+                    <p className="mt-2 text-xs text-slate-600">
+                      Last completed:{' '}
+                      <span className="font-medium text-slate-800">{act.last_completed_project_title}</span>
+                      {formatShortDate(act.last_completed_at) ? (
+                        <span className="text-slate-500"> · {formatShortDate(act.last_completed_at)}</span>
+                      ) : null}
+                    </p>
+                  ) : null}
                 </div>
-                <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-sm italic text-slate-500">
-                  {student.latest_feedback_summary || 'No recent evaluator feedback in this domain yet.'}
-                </p>
+
+                <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-800">Coaching tip</p>
+                  <p className="mt-1 text-sm leading-relaxed text-slate-800">{advice}</p>
+                </div>
+
+                {feedback ? (
+                  <details className="mt-3 rounded-lg border border-slate-200 bg-slate-50/90 text-sm">
+                    <summary className="cursor-pointer select-none px-3 py-2 font-medium text-slate-700 hover:bg-slate-100/80">
+                      Latest evaluation feedback (expand)
+                    </summary>
+                    <div className="border-t border-slate-200 px-3 py-2 text-slate-700 leading-relaxed">{feedback}</div>
+                  </details>
+                ) : (
+                  <p className="mt-3 text-xs text-slate-500">No evaluation summary text on the latest submission yet.</p>
+                )}
               </article>
             );
           })}

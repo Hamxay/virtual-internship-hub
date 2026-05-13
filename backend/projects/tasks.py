@@ -1,6 +1,4 @@
-"""
-Celery tasks for the projects app (FR4 async AI evaluation).
-"""
+"""Celery entrypoints for async submission evaluation."""
 from __future__ import annotations
 
 import logging
@@ -15,12 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def delete_uploaded_file_for_submission(submission_id: int) -> None:
-    """
-    Remove the stored upload from disk and clear the FileField to save space.
-
-    Runs after evaluation (success or failure). Uses ``os.remove`` when the path
-    still exists after Django storage handling.
-    """
+    """Clear the FileField and delete the on-disk blob if it still exists."""
     submission = ProjectSubmission.objects.filter(pk=submission_id).first()
     if not submission:
         return
@@ -51,5 +44,4 @@ def delete_uploaded_file_for_submission(submission_id: int) -> None:
 
 @shared_task
 def async_evaluate_submission(submission_id: int) -> None:
-    """Queue FR4 evaluation for a submission."""
     evaluate_submission_logic(submission_id)

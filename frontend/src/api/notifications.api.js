@@ -13,5 +13,6 @@ export async function markAsRead(id) {
 }
 
 export async function markAllAsRead() {
-  await client.post('notifications/read-all/');
+  const { data } = await client.post('notifications/read-all/', {});
+  return data;
 }

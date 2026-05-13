@@ -202,8 +202,8 @@ Logic is **not** only in views: heavy work is split into modules below. Views va
 
 | Module / package | Responsibility | Used by (typical) |
 |------------------|------------------|-------------------|
-| **`projects/services/evaluation.py`** | FR4 pipeline: extract submission (repo + files + text), gatekeepers (plagiarism/syntax), call **OpenRouter** or **heuristic** path, write **`SubmissionEvaluation`**, update **`StudentProjectAssignment`** status (e.g. `PENDING_MENTOR_REVIEW`, `NEEDS_REVISION`), refresh snapshot / difficulty | `evaluate_submission_logic()` ← **`projects/tasks.async_evaluate_submission`** (Celery) after student `POST …/submissions/` |
-| **`projects/services/evaluation_gatekeepers.py`** | Pre-AI checks (similarity caps, plagiarism triggers) | `evaluation.py` |
+| **`projects/services/evaluation.py`** | FR4 pipeline: build submission bundle, local TF-IDF plagiarism check, gatekeepers (empty / Python syntax), **OpenRouter** JSON eval, write **`SubmissionEvaluation`**, update assignment / snapshot | `evaluate_submission_logic()` ← **`projects/tasks.async_evaluate_submission`** (Celery) after student `POST …/submissions/` |
+| **`projects/services/evaluation_gatekeepers.py`** | Pre-LLM checks: empty bundle, Python ``ast`` syntax for CODE | `evaluation.py` |
 | **`projects/services/extractor.py`** | Typed extraction result for gatekeepers / bundle | `evaluation.py` |
 | **`projects/utils/code_flattener.py`** | GitHub repo → text bundle for prompts | `evaluation.py` |
 | **`projects/utils/document_extractor.py`** | Local file → markdown text / binary artifact note (PDF/images) and text extraction for docx/xlsx/csv | `evaluation.py` |
@@ -230,7 +230,7 @@ Logic is **not** only in views: heavy work is split into modules below. Views va
 3. Worker runs **`evaluate_submission_logic(submission_id)`** in **`evaluation.py`**:  
    - Builds text/media bundle (**`UniversalRepositoryFlattener`**, **`UniversalDocumentExtractor`**, notes/text).  
    - Gatekeepers in **`evaluation_gatekeepers`**.  
-   - Primary path: **OpenRouter** JSON rubric response (model from **`OPENROUTER_PROJECT_EVAL_MODEL`**); fallback: **`evaluate_submission_heuristic`** (sklearn **TfidfVectorizer**, **cosine_similarity**, rubric math).  
+   - **OpenRouter** JSON rubric response (model from **`OPENROUTER_PROJECT_EVAL_MODEL`**). If the API key is missing or the call fails, a **`openrouter_unavailable`** evaluation is stored. Plagiarism uses a local TF-IDF similarity gate (offline).  
    - Persists **`SubmissionEvaluation`**, updates **assignment** status / **`latest_evaluation_score`**, submission status.  
 4. Task **`finally`** runs janitor to delete uploaded file from disk after evaluation.
 

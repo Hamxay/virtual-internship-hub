@@ -1,8 +1,4 @@
-"""
-Celery application for async tasks (e.g. FR4 AI evaluation).
-
-Run worker: ``celery -A config worker -l info``
-"""
+"""Celery app (async tasks such as submission evaluation). Worker: ``celery -A config worker -l info``."""
 import os
 
 from celery import Celery

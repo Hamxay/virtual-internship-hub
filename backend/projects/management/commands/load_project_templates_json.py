@@ -1,20 +1,8 @@
 """
-Load project templates from a JSON file (bulk import via management command).
-This is the only management command for seeding templates; use JSON for all catalog content.
+Import ``ProjectTemplate`` rows (plus instruction + rubric) from a JSON array.
 
-Usage:
-  python manage.py load_project_templates_json --file projects/data/my_templates.json
-  python manage.py load_project_templates_json --file path/to/file.json --dry-run
-
-JSON format: a top-level array of objects. Each object matches ProjectTemplateSerializer input:
-  - domain_id (int) OR domain_code (str, matches accounts.Domain.code case-insensitively)
-  - title, short_description, business_problem, complexity, submission_type, estimated_hours,
-    tags, prerequisite_skills, expected_keywords, active
-  - instruction: { overview, steps, deliverables, submission_requirements, starter_resources, evaluation_notes }
-  - rubric: { passing_score, criteria, allow_auto_accept, plagiarism_threshold, grammar_weight } (all optional)
-
-Uses update_or_create(domain, title) so re-running the same file updates existing rows.
-All rows are applied in one database transaction (all succeed or none).
+Each element matches ``ProjectTemplateSerializer`` (``domain_id`` or ``domain_code``, etc.).
+``update_or_create(domain, title)`` makes the import idempotent; one transaction for all rows.
 """
 from __future__ import annotations
 
@@ -61,16 +49,16 @@ def _prepare_payload(entry: dict, domain: Domain) -> dict:
 
 def _apply_entry(validated: Dict[str, Any]) -> bool:
     """Create or update template + instruction + rubric. Returns True if template row was created."""
-    data = copy.deepcopy(dict(validated))
-    instruction_data = data.pop('instruction', None) or {}
-    rubric_data = data.pop('rubric', None) or {}
-    domain = data.pop('domain')
-    title = data.pop('title')
+    row = copy.deepcopy(dict(validated))
+    instruction_data = row.pop('instruction', None) or {}
+    rubric_data = row.pop('rubric', None) or {}
+    domain = row.pop('domain')
+    title = row.pop('title')
 
     template, created = ProjectTemplate.objects.update_or_create(
         domain=domain,
         title=title,
-        defaults=data,
+        defaults=row,
     )
     ProjectInstruction.objects.update_or_create(
         project_template=template,
@@ -136,7 +124,8 @@ class Command(BaseCommand):
             raise CommandError(f'File not found: {path}')
 
         try:
-            raw = json.loads(path.read_text(encoding='utf-8'))
+            # Accept files saved with UTF-8 BOM (common on Windows).
+            raw = json.loads(path.read_text(encoding='utf-8-sig'))
         except json.JSONDecodeError as e:
             raise CommandError(f'Invalid JSON: {e}') from e
 

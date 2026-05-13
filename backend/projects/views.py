@@ -1,9 +1,15 @@
 from datetime import timedelta
+import json
+import logging
 
 from django.db import transaction
 from django.db.models import Avg, Count, Max
 from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+
 from rest_framework import generics, permissions, status
+from rest_framework.exceptions import ParseError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -20,7 +26,10 @@ from .serializers import (
     StudentProjectAssignmentSerializer,
 )
 from .tasks import async_evaluate_submission
+from .services.copyleaks import extract_similarity_percent
 from .services.recommendation import refresh_recommended_assignments, update_student_progress_snapshot
+
+logger = logging.getLogger(__name__)
 
 
 class AdminProjectTemplateListCreateView(generics.ListCreateAPIView):
@@ -144,6 +153,11 @@ class StudentSubmissionCreateView(APIView):
         )
         if not assignment:
             return Response({'detail': 'Assignment not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if assignment.status not in ('IN_PROGRESS', 'NEEDS_REVISION'):
+            return Response(
+                {'detail': 'You can submit only when assignment is in progress or needs revision.'},
+                status=status.HTTP_409_CONFLICT,
+            )
 
         with transaction.atomic():
             locked_assignment = StudentProjectAssignment.objects.select_for_update().get(pk=assignment.pk)
@@ -212,3 +226,95 @@ class AdminEvaluationSummaryView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class CopyleaksWebhookView(APIView):
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+    parser_classes = [JSONParser, FormParser]
+
+    def post(self, request, status_name, scan_id):
+        raw_body = (request.body or b'').decode('utf-8', errors='ignore')
+        try:
+            parsed_payload = request.data
+            payload = parsed_payload if isinstance(parsed_payload, dict) else {}
+        except ParseError:
+            try:
+                payload = json.loads(raw_body) if raw_body.strip().startswith('{') else {}
+            except ValueError:
+                payload = {}
+
+        logger.info(
+            'Copyleaks webhook received status=%s scan_id=%s raw_body=%s',
+            status_name,
+            scan_id,
+            raw_body,
+        )
+        logger.info(
+            'Copyleaks webhook parsed payload status=%s scan_id=%s payload=%s',
+            status_name,
+            scan_id,
+            json.dumps(payload, ensure_ascii=True, default=str),
+        )
+
+        submission = (
+            ProjectSubmission.objects.filter(
+                metadata__plagiarism_scan_id=scan_id
+            )
+            .select_related('assignment__project_template__rubric')
+            .first()
+        )
+        if not submission:
+            submission = (
+                ProjectSubmission.objects.filter(
+                    metadata__copyleaks_scan_id=scan_id
+                )
+                .select_related('assignment__project_template__rubric')
+                .first()
+            )
+        if not submission:
+            return Response({'detail': 'Submission not found for scan.'}, status=status.HTTP_404_NOT_FOUND)
+
+        status_lower = str(status_name or '').lower().strip() or 'unknown'
+        meta = submission.metadata if isinstance(submission.metadata, dict) else {}
+        meta = {
+            **meta,
+            'plagiarism_provider': 'copyleaks',
+            'plagiarism_source': 'copyleaks',
+            'plagiarism_scan_id': scan_id,
+            'plagiarism_status': status_lower,
+            'plagiarism_webhook_payload': payload,
+            'copyleaks_scan_id': scan_id,
+            'copyleaks_scan_status': status_lower,
+            'copyleaks_webhook_payload': payload,
+        }
+
+        if status_lower == 'completed':
+            similarity_percent = extract_similarity_percent(payload)
+            meta['plagiarism_similarity_percent'] = similarity_percent
+            meta['copyleaks_similarity_percent'] = similarity_percent
+            logger.info(
+                'Copyleaks completed status submission=%s scan_id=%s similarity=%s',
+                submission.pk,
+                scan_id,
+                similarity_percent,
+            )
+
+            if not submission.evaluations.exists() and not bool(meta.get('copyleaks_ai_eval_enqueued')):
+                meta['copyleaks_ai_eval_enqueued'] = True
+                submission.metadata = meta
+                submission.save(update_fields=['metadata'])
+                sid = submission.pk
+                transaction.on_commit(
+                    lambda submission_id=sid: async_evaluate_submission.delay(submission_id)
+                )
+            else:
+                submission.metadata = meta
+                submission.save(update_fields=['metadata'])
+            return Response({'detail': 'Completed webhook processed.'}, status=status.HTTP_200_OK)
+
+        submission.metadata = meta
+        submission.save(update_fields=['metadata'])
+        return Response({'detail': 'Webhook received.'}, status=status.HTTP_200_OK)
+

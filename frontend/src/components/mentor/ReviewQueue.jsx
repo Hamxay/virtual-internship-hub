@@ -138,7 +138,7 @@ export default function ReviewQueue({ notificationHint = '' }) {
   };
 
   return (
-    <div className="flex min-h-[32rem] flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+    <div className="flex min-h-[32rem] flex-col rounded-2xl border border-cyan-100 bg-white/90 p-4 shadow-md shadow-cyan-100/40 sm:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-slate-600">
           Student work waiting for your feedback. Pick one item to review.
@@ -147,7 +147,7 @@ export default function ReviewQueue({ notificationHint = '' }) {
           type="button"
           onClick={loadQueue}
           disabled={loading}
-          className="inline-flex items-center rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-100 disabled:opacity-60"
+          className="inline-flex items-center rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-sm font-medium text-cyan-800 shadow-sm hover:bg-cyan-100 disabled:opacity-60"
         >
           {loading ? 'Refreshing…' : 'Refresh'}
         </button>
@@ -160,19 +160,19 @@ export default function ReviewQueue({ notificationHint = '' }) {
       ) : null}
 
       {loading && rows.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 py-20 text-slate-500">
+        <div className="flex flex-1 items-center justify-center rounded-xl border border-cyan-100 bg-cyan-50/60 py-20 text-slate-500">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-600" />
           <span className="ml-3 text-sm font-medium">Loading queue…</span>
         </div>
       ) : rows.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/80 py-16 text-center">
+        <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-cyan-200 bg-cyan-50/70 py-16 text-center">
           <p className="text-sm font-medium text-slate-700">You&apos;re all caught up</p>
           <p className="mt-1 max-w-sm text-xs text-slate-500">No student submissions are waiting for review right now.</p>
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 gap-4 lg:gap-6">
-          <aside className="flex w-full max-w-full shrink-0 flex-col rounded-xl border border-slate-200 bg-slate-50 shadow-sm lg:w-96">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+          <aside className="flex w-full max-w-full shrink-0 flex-col rounded-xl border border-cyan-100 bg-cyan-50/50 shadow-sm lg:w-96">
+            <div className="flex items-center justify-between border-b border-cyan-100 px-4 py-3">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Waiting for feedback</span>
               <span className="rounded-full bg-slate-900 px-2 py-0.5 text-xs font-semibold text-white">{rows.length}</span>
             </div>
@@ -190,8 +190,8 @@ export default function ReviewQueue({ notificationHint = '' }) {
                       onClick={() => setSelectedId(row.id)}
                       className={`w-full rounded-lg border px-3 py-3 text-left transition ${
                         active
-                          ? 'border-indigo-500 bg-indigo-50/90 ring-1 ring-indigo-500'
-                          : 'border-transparent bg-white hover:border-slate-200 hover:bg-slate-50'
+                          ? 'border-teal-500 bg-teal-50 ring-1 ring-teal-400'
+                          : 'border-transparent bg-white hover:border-cyan-200 hover:bg-cyan-50/60'
                       }`}
                     >
                       <div className="text-base font-semibold leading-snug text-slate-900 line-clamp-2">{title}</div>

@@ -6,7 +6,6 @@ class ProjectsConfig(AppConfig):
     name = 'projects'
 
     def ready(self):
-        # Load package Celery app and register ``projects.tasks`` for ``.delay()`` from Django.
-        import config  # noqa: F401
-        import projects.signals  # noqa: F401 — FR10 notifications
+        import config  # noqa: F401  — ensures Celery app is loaded
+        import projects.signals  # noqa: F401
         import projects.tasks  # noqa: F401

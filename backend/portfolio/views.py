@@ -21,8 +21,7 @@ class PublicPortfolioView(APIView):
         )
         get_object_or_404(StudentProfile, user=user)
 
-        # ProjectSubmission has no COMPLETED status; assignment completion is tracked on
-        # StudentProjectAssignment (see projects.models.ASSIGNMENT_STATUS_CHOICES).
+        # Completion is on the assignment, not the submission row.
         submissions = (
             ProjectSubmission.objects.filter(
                 assignment__student__username=username,

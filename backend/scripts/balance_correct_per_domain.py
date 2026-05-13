@@ -1,6 +1,5 @@
 """Balance correct_option per domain so each domain's 30 questions include A, B, C, D."""
 import json
-import sys
 from pathlib import Path
 from collections import Counter
 

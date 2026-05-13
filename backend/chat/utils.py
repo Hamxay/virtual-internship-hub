@@ -1,7 +1,4 @@
-"""
-FR7 career coach: context injection (RAG-style grounding).
-Chat completions use **OpenRouter**. FR4 project evaluation also uses OpenRouter in ``projects``.
-"""
+"""Career coach: build grounded system text and call OpenRouter chat completions."""
 from __future__ import annotations
 
 import logging
@@ -44,15 +41,7 @@ def _completed_project_titles(user: 'User', limit: int = 8) -> list[str]:
 
 
 def build_career_coach_prompt(user: 'User') -> str:
-    """
-    Build system-style instructions from the learner's profile and progress.
-
-    Three-tier state:
-      1 — Blank: no domains, no completed projects → onboarding & path choice.
-      2 — Theorist: domains set, no completed projects → motivate first assignment.
-      3 — Practitioner: at least one completed project → monetization, Upwork,
-         and linking to their FR6 public portfolio.
-    """
+    """System prompt from domains + completed projects (onboarding → first project → portfolio/freelancing)."""
     domains = _student_domains(user)
     project_titles = _completed_project_titles(user)
     has_domains = bool(domains)
@@ -63,8 +52,8 @@ def build_career_coach_prompt(user: 'User') -> str:
         focus = (
             'Prioritize freelancing monetization, Upwork-style positioning and proposals, '
             'client communication, pricing and packaging offers, and how to reference their '
-            'completed work. Strongly encourage them to maintain and share their FR6 public '
-            f'portfolio (API path pattern: /api/portfolio/{user.username}/ for their public showcase).'
+            'completed work. Encourage them to maintain and share their public '
+            f'portfolio (e.g. `/api/portfolio/{user.username}/`).'
         )
     elif has_domains:
         state_label = 'STATE 2 — Theorist'
@@ -170,7 +159,6 @@ def _run_career_coach_openrouter(system_instruction: str, history: List[Tuple[st
         headers['HTTP-Referer'] = referer
     title = (getattr(settings, 'OPENROUTER_APP_TITLE', None) or '').strip()
     if title:
-        # OpenRouter accepts X-Title; docs also recommend X-OpenRouter-Title for attribution.
         headers['X-Title'] = title
         headers['X-OpenRouter-Title'] = title
 
@@ -195,17 +183,17 @@ def _run_career_coach_openrouter(system_instruction: str, history: List[Tuple[st
         raise RuntimeError('OpenRouter rate limit exceeded; try again shortly.')
 
     try:
-        data = resp.json()
+        response_json = resp.json()
     except ValueError:
         logger.warning('OpenRouter non-JSON response status=%s body=%s', resp.status_code, resp.text[:500])
         raise RuntimeError('OpenRouter returned an invalid response.') from None
 
     if resp.status_code >= 400:
-        err = data.get('error') if isinstance(data, dict) else None
-        msg = err.get('message', resp.text[:300]) if isinstance(err, dict) else str(data)[:300]
+        err = response_json.get('error') if isinstance(response_json, dict) else None
+        msg = err.get('message', resp.text[:300]) if isinstance(err, dict) else str(response_json)[:300]
         raise RuntimeError(f'OpenRouter error ({resp.status_code}): {msg}')
 
-    choices = data.get('choices') if isinstance(data, dict) else None
+    choices = response_json.get('choices') if isinstance(response_json, dict) else None
     if not choices:
         raise RuntimeError('OpenRouter returned no choices.')
     message = choices[0].get('message') if isinstance(choices[0], dict) else None
@@ -218,10 +206,6 @@ def _run_career_coach_openrouter(system_instruction: str, history: List[Tuple[st
 
 
 def run_career_coach(system_instruction: str, history: List[Tuple[str, str]]) -> str:
-    """
-    Career coach reply via OpenRouter (``OPENROUTER_API_KEY`` / ``OPENROUTER_CHAT_MODEL``).
-
-    ``history`` is chronological (oldest first): (role, content) with role in {'user', 'model'}.
-    """
+    """One assistant turn; ``history`` is oldest-first ``(role, content)`` pairs."""
     return _run_career_coach_openrouter(system_instruction, history)
 

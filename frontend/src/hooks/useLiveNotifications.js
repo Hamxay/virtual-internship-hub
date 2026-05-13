@@ -1,30 +1,37 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotificationToast } from '../components/ui/NotificationToast';
 import { getNotifications, markAsRead as markAsReadApi, markAllAsRead as markAllAsReadApi } from '../api/notifications.api';
 import { API_BASE_URL } from '../api/client';
 
+// Backend may send is_read as bool, string, or 0/1 — coerce for the bell UI.
+function normalizeNotification(n) {
+  if (n == null || typeof n !== 'object') return n;
+  const read = n.is_read === true || n.is_read === 'true' || n.is_read === 1;
+  return { ...n, is_read: read };
+}
+
 function buildNotificationsWsUrl(token) {
-  const base = API_BASE_URL || 'http://localhost:8001/api';
+  const base = API_BASE_URL || 'http://localhost:8000/api';
   try {
     const u = new URL(base);
     const wsProto = u.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${wsProto}//${u.host}/ws/notifications/?token=${encodeURIComponent(token)}`;
   } catch {
-    return `ws://localhost:8001/ws/notifications/?token=${encodeURIComponent(token)}`;
+    return `ws://localhost:8000/ws/notifications/?token=${encodeURIComponent(token)}`;
   }
 }
 
-/**
- * FR10 live notifications + REST history (students & mentors).
- * @param {{ enabled: boolean }} opts
- */
+/** Live WS feed plus REST history for student/mentor dashboards. */
 export function useLiveNotifications({ enabled }) {
   const { addToast } = useNotificationToast();
   const { isAuthenticated } = useAuth();
   const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const unreadCount = useMemo(
+    () => notifications.filter((n) => n && n.is_read !== true).length,
+    [notifications],
+  );
   const wsRef = useRef(null);
   const reconnectTimerRef = useRef(null);
   const allowReconnectRef = useRef(true);
@@ -32,18 +39,16 @@ export function useLiveNotifications({ enabled }) {
   const loadHistory = useCallback(async () => {
     try {
       const list = await getNotifications();
-      setNotifications(Array.isArray(list) ? list : []);
-      setUnreadCount((Array.isArray(list) ? list : []).filter((n) => !n.is_read).length);
+      const raw = Array.isArray(list) ? list : [];
+      setNotifications(raw.map(normalizeNotification));
     } catch {
       setNotifications([]);
-      setUnreadCount(0);
     }
   }, []);
 
   useEffect(() => {
     if (!enabled || !isAuthenticated) {
       setNotifications([]);
-      setUnreadCount(0);
       return undefined;
     }
 
@@ -68,10 +73,16 @@ export function useLiveNotifications({ enabled }) {
 
         ws.onmessage = (event) => {
           try {
-            const data = JSON.parse(event.data);
-            setNotifications((prev) => [data, ...prev.filter((n) => n.id !== data.id)]);
-            setUnreadCount((c) => c + 1);
-            addToast({ message: data.message || 'New notification' });
+            const payload = JSON.parse(event.data);
+            if (payload == null || typeof payload !== 'object') return;
+            setNotifications((prev) => {
+              const id = payload.id;
+              const row = normalizeNotification(payload);
+              return [row, ...prev.filter((entry) => entry.id !== id)];
+            });
+            if (!normalizeNotification(payload).is_read) {
+              addToast({ message: payload.message || 'New notification' });
+            }
           } catch {
             /* ignore malformed payloads */
           }
@@ -113,20 +124,24 @@ export function useLiveNotifications({ enabled }) {
   }, [enabled, isAuthenticated, loadHistory, addToast]);
 
   const markAsRead = useCallback(async (id) => {
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
     try {
       await markAsReadApi(id);
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-      setUnreadCount((c) => Math.max(0, c - 1));
     } catch {
-      /* ignore */
+      await loadHistory();
     }
-  }, []);
+  }, [loadHistory]);
 
   const markAllAsRead = useCallback(async () => {
-    await markAllAsReadApi();
-    setNotifications([]);
-    setUnreadCount(0);
-  }, []);
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    try {
+      await markAllAsReadApi();
+    } catch {
+      /* server may have failed — resync */
+    } finally {
+      await loadHistory();
+    }
+  }, [loadHistory]);
 
   return {
     notifications,

@@ -1,7 +1,6 @@
-/**
- * Student Dashboard – skill assessment (composed MCQs + ML domain profile), tasks, career chatbot.
- */
+/** Student home: skill assessment, project tasks, progress, career coach. */
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { studentApi } from '../../api/student.api';
 import { getDomains } from '../../api/domains.api';
@@ -9,13 +8,14 @@ import { buildProfileUpdatePayload, buildAssessmentSubmitPayload } from '../../s
 import { getErrorMessage } from '../../utilities/authUtils';
 import StudentTasksSection from './StudentTasksSection';
 import CareerCoachWidget from '../chat/CareerCoachWidget';
+import MentorStudentChatTab from '../chat/MentorStudentChatTab';
 import Navbar from '../layout/Navbar';
 import StudentGrowthDashboard from '../student/StudentGrowthDashboard';
+import StudentMyProgressSection from '../student/StudentMyProgressSection';
 import {
   GraduationCapIcon,
   LayoutDashboardIcon,
   CheckSquareIcon,
-  FolderOpenIcon,
   LogOutIcon,
   AlertCircleIcon,
   CheckCircleIcon,
@@ -28,6 +28,7 @@ import {
   ChevronRightIcon,
   XCircleIcon,
   BarChartIcon,
+  MessageCircleIcon,
   ArrowLeftIcon,
 } from '../ui/Icons';
 import './Dashboard.css';
@@ -35,10 +36,10 @@ import './Dashboard.css';
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboardIcon },
   { id: 'tasks', label: 'Projects', icon: CheckSquareIcon },
-  { id: 'portfolio', label: 'Portfolio', icon: FolderOpenIcon },
+  { id: 'chat', label: 'Chat', icon: MessageCircleIcon },
+  { id: 'progress', label: 'My Progress', icon: BarChartIcon },
 ];
 
-/* Figma-style: Start screen before quiz – Back allowed here; no back once quiz starts */
 function AssessmentStartScreen({ onStart, onBack, attemptCount, maxAttempts }) {
   return (
     <div className="quiz-screen-wrap">
@@ -96,7 +97,6 @@ function AssessmentStartScreen({ onStart, onBack, attemptCount, maxAttempts }) {
   );
 }
 
-/* Figma-style: One question per page with timer */
 function AssessmentQuizView({ questions, selectedAnswers, onSelectAnswer, currentIndex, onNext, onSubmit, loading, error }) {
   const [timeLeft, setTimeLeft] = React.useState(60);
   const currentQuestion = questions[currentIndex];
@@ -117,7 +117,7 @@ function AssessmentQuizView({ questions, selectedAnswers, onSelectAnswer, curren
     return () => clearInterval(t);
   }, [timeLeft, isLast, onNext, onSubmit]);
 
-  // Blue ring = remaining time: full at 60s, depletes to empty at 0s
+  // Ring stroke tracks seconds remaining (60 → 0).
   const circumference = 2 * Math.PI * 34;
   const progress = (timeLeft / 60) * 100;
   const strokeDashoffset = circumference * (1 - progress / 100);
@@ -213,7 +213,7 @@ function SelectDomainsCard({ onSaved, refreshUser, initialSelectedIds = [] }) {
       .finally(() => setLoading(false));
   }, []);
 
-  // Sync from server when profile ids actually change (avoid resetting on new [] reference each render)
+  // Only reset picks when the server-sent id list really changed (stable string key).
   const initialIdsKey = Array.isArray(initialSelectedIds)
     ? [...initialSelectedIds].sort((a, b) => a - b).join(',')
     : '';
@@ -225,17 +225,17 @@ function SelectDomainsCard({ onSaved, refreshUser, initialSelectedIds = [] }) {
     });
   }, [initialIdsKey]);
 
-  const toggle = (id) => {
+  const toggleDomainSelection = (domainId) => {
     setSelectedIds((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.includes(domainId)) return prev.filter((x) => x !== domainId);
       if (prev.length >= MAX_DOMAINS) return prev;
-      return [...prev, id];
+      return [...prev, domainId];
     });
   };
 
   const handleSave = () => {
-    if (selectedIds.length < MIN_DOMAINS) {
-      setError(`Select at least ${MIN_DOMAINS} and up to ${MAX_DOMAINS} domains.`);
+    if (selectedIds.length < MIN_DOMAINS || selectedIds.length > MAX_DOMAINS) {
+      setError(`Select at least ${MIN_DOMAINS} and at most ${MAX_DOMAINS} domains.`);
       return;
     }
     setError(null);
@@ -263,15 +263,15 @@ function SelectDomainsCard({ onSaved, refreshUser, initialSelectedIds = [] }) {
           </p>
           {error && <p style={{ color: '#dc2626', marginBottom: '0.5rem', fontSize: '0.875rem' }}>{error}</p>}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
-            {domains.map((d) => (
-              <label key={d.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0.5rem 0.75rem', background: selectedIds.includes(d.id) ? '#eff6ff' : '#f3f4f6', border: `2px solid ${selectedIds.includes(d.id) ? '#2563eb' : '#e5e7eb'}`, borderRadius: 8, cursor: 'pointer' }}>
-                <input type="checkbox" checked={selectedIds.includes(d.id)} onChange={() => toggle(d.id)} />
-                <span>{d.name}</span>
+            {domains.map((domain) => (
+              <label key={domain.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0.5rem 0.75rem', background: selectedIds.includes(domain.id) ? '#eff6ff' : '#f3f4f6', border: `2px solid ${selectedIds.includes(domain.id) ? '#2563eb' : '#e5e7eb'}`, borderRadius: 8, cursor: 'pointer' }}>
+                <input type="checkbox" checked={selectedIds.includes(domain.id)} onChange={() => toggleDomainSelection(domain.id)} />
+                <span>{domain.name}</span>
               </label>
             ))}
           </div>
-          <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.75rem' }}>{selectedIds.length} of {MAX_DOMAINS} selected (min {MIN_DOMAINS})</p>
-          <button type="button" className="btn-start-assessment" onClick={handleSave} disabled={saving || selectedIds.length < MIN_DOMAINS}>
+          <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.75rem' }}>{selectedIds.length} selected (min {MIN_DOMAINS}, max {MAX_DOMAINS})</p>
+          <button type="button" className="btn-start-assessment" onClick={handleSave} disabled={saving || selectedIds.length < MIN_DOMAINS || selectedIds.length > MAX_DOMAINS}>
             {saving ? 'Saving…' : 'Save domains'}
           </button>
         </div>
@@ -280,7 +280,6 @@ function SelectDomainsCard({ onSaved, refreshUser, initialSelectedIds = [] }) {
   );
 }
 
-/* Figma-style: Results screen */
 function AssessmentResultView({ result, onBack, onGoToTasks }) {
   const percentage = result.percentage ?? 0;
   const passed = result.passed ?? percentage >= PASSING_PERCENT;
@@ -290,10 +289,8 @@ function AssessmentResultView({ result, onBack, onGoToTasks }) {
   const correctCount = result.correct_count ?? (questionCount ? score : 0);
   const displayTotal = questionCount > 0 ? questionCount : totalPoints;
   const displayCorrect = questionCount > 0 ? correctCount : score;
-  const recommended = result.recommended_domains?.[0];
-  const meta = result.recommendation_meta;
-  const profileText = meta?.weighted_domain_profile_text;
-  const domainAdded = meta?.added_recommended_to_profile === true;
+  const recommendedDomain = result?.recommended_domains?.[0] || null;
+  const weightedProfileText = result?.recommendation_meta?.weighted_domain_profile_text;
 
   return (
     <div className="quiz-screen-wrap">
@@ -336,44 +333,33 @@ function AssessmentResultView({ result, onBack, onGoToTasks }) {
           <span>70%</span>
         </div>
 
-        {passed && (recommended || profileText) && (
-          <div className="quiz-note-box" style={{ marginTop: '1rem' }}>
-            {recommended && (
-              <p><strong>Your recommended domain:</strong> {recommended.name}</p>
-            )}
-            {profileText && (
-              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem', color: '#374151' }}>
-                <strong>Weighted domain profile:</strong> {profileText}
-              </p>
-            )}
-            {meta?.explanation && (
-              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem', color: '#374151' }}>
-                {meta.explanation}
-              </p>
-            )}
-            {Array.isArray(meta?.ranked_domains) && meta.ranked_domains.length > 1 && (
-              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.8125rem', color: '#6b7280' }}>
-                <strong>How you scored by domain:</strong>{' '}
-                {meta.ranked_domains
-                  .map((d) => `${d.domain_name} (${d.percentage}%)`)
-                  .join(' · ')}
-              </p>
-            )}
-            {domainAdded && (
-              <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem' }}>This domain has been added to your profile.</p>
-            )}
+        {!passed && (
+          <div className="quiz-retry-note">
+            <p>{result.message || 'Score below 70%. Take the test again. You have 2 attempts per day.'}</p>
           </div>
         )}
 
         {passed && (
-          <p style={{ marginTop: '1rem', fontSize: '0.8125rem', color: '#64748b', lineHeight: 1.5, textAlign: 'center' }}>
-            Your domain mix is saved to your project profile so upcoming tasks can match your strengths.
-          </p>
-        )}
-
-        {!passed && (
-          <div className="quiz-retry-note">
-            <p>{result.message || 'Score below 70%. Take the test again. You have 2 attempts per day.'}</p>
+          <div className="quiz-results-row" style={{ display: 'block' }}>
+            <div style={{ marginBottom: '0.35rem', color: '#334155', fontSize: '0.875rem' }}>
+              Recommended domain
+            </div>
+            {recommendedDomain ? (
+              <>
+                <div className="domain-tags" style={{ marginTop: 0 }}>
+                  <span>{recommendedDomain.name}</span>
+                </div>
+                {weightedProfileText ? (
+                  <p style={{ margin: '0.5rem 0 0 0', color: '#64748b', fontSize: '0.8125rem', lineHeight: 1.45 }}>
+                    Domain profile: {weightedProfileText}
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <p style={{ margin: 0, color: '#64748b', fontSize: '0.8125rem' }}>
+                Your recommendation is syncing. It will appear in Dashboard and Projects shortly.
+              </p>
+            )}
           </div>
         )}
 
@@ -393,16 +379,16 @@ function AssessmentResultView({ result, onBack, onGoToTasks }) {
 }
 
 function StudentDashboard() {
+  const location = useLocation();
   const { user, logout, refreshUser } = useAuth();
   const [activeView, setActiveView] = useState('dashboard');
   const [assessmentPassed, setAssessmentPassed] = useState(false);
-  const [, setAttemptCount] = useState(0);
-  const [attemptCountToday, setAttemptCountToday] = useState(0); // from attempts list, for "X of 2 used today"
+  const [attemptCountToday, setAttemptCountToday] = useState(0);
   const [lastAttempt, setLastAttempt] = useState(null);
-  const [assessmentView, setAssessmentView] = useState('idle'); // 'idle' | 'intro' | 'test' | 'result'
-  const [composedData, setComposedData] = useState(null);
+  const [assessmentView, setAssessmentView] = useState('idle');
+  const [skillAssessmentSession, setSkillAssessmentSession] = useState(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [selectedAnswers, setSelectedAnswers] = useState([]); // array of 'A'|'B'|'C'|'D'|null by question index
+  const [selectedAnswers, setSelectedAnswers] = useState([]);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [assessmentError, setAssessmentError] = useState(null);
   const [result, setResult] = useState(null);
@@ -410,23 +396,34 @@ function StudentDashboard() {
   const [pendingResult, setPendingResult] = useState(null);
   const [taskStats, setTaskStats] = useState({ completed: 0, inProgress: 0 });
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('task_view') === 'tasks') {
+      setActiveView('tasks');
+      return;
+    }
+    if (params.get('student_tab') === 'chat' || params.get('tab') === 'chat') {
+      setActiveView('chat');
+    }
+  }, [location.search]);
+
   const loadAttempts = () => {
     studentApi.getAttempts()
       .then((res) => {
-        const data = res.data || {};
-        const list = Array.isArray(data) ? data : (data.results || []);
-        setAttemptCount(list.length);
-        const today = new Date().toISOString().slice(0, 10);
-        const todayCount = list.filter((a) => {
-          if (!a.submitted_at) return false;
-          const d = new Date(a.submitted_at).toISOString().slice(0, 10);
-          return d === today;
+        const body = res.data || {};
+        const attemptHistory = Array.isArray(body) ? body : (body.results || []);
+        const todayKey = new Date().toISOString().slice(0, 10);
+        const attemptsToday = attemptHistory.filter((attempt) => {
+          if (!attempt.submitted_at) return false;
+          const submittedDay = new Date(attempt.submitted_at).toISOString().slice(0, 10);
+          return submittedDay === todayKey;
         }).length;
-        setAttemptCountToday(todayCount);
-        const passed = list.some((a) => (a.score / (a.total_points || 1)) * 100 >= 70);
+        setAttemptCountToday(attemptsToday);
+        const passed = attemptHistory.some(
+          (attempt) => (attempt.score / (attempt.total_points || 1)) * 100 >= PASSING_PERCENT,
+        );
         setAssessmentPassed(passed);
-        // Always keep latest attempt so we can show "previous recommendation" when user changed domains
-        if (list.length > 0) setLastAttempt(list[0]);
+        if (attemptHistory.length > 0) setLastAttempt(attemptHistory[0]);
       })
       .catch(() => {});
   };
@@ -455,7 +452,7 @@ function StudentDashboard() {
     setCurrentQuestionIndex(0);
     studentApi.getComposedAssessment()
       .then((res) => {
-        setComposedData(res.data);
+        setSkillAssessmentSession(res.data);
         setAssessmentView('intro');
       })
       .catch((err) => {
@@ -464,8 +461,8 @@ function StudentDashboard() {
   };
 
   const handleStartQuiz = () => {
-    if (!composedData?.questions?.length) return;
-    setSelectedAnswers(Array(composedData.questions.length).fill(null));
+    if (!skillAssessmentSession?.questions?.length) return;
+    setSelectedAnswers(Array(skillAssessmentSession.questions.length).fill(null));
     setCurrentQuestionIndex(0);
     setAssessmentView('test');
   };
@@ -479,25 +476,24 @@ function StudentDashboard() {
   };
 
   const handleNextQuestion = () => {
-    setCurrentQuestionIndex((prev) => Math.min(prev + 1, (composedData?.questions?.length ?? 1) - 1));
+    setCurrentQuestionIndex((prev) => Math.min(prev + 1, (skillAssessmentSession?.questions?.length ?? 1) - 1));
   };
 
   const REVIEW_DELAY_MS = 4000;
 
   const handleSubmitAssessment = () => {
-    if (!composedData?.questions?.length) return;
+    if (!skillAssessmentSession?.questions?.length) return;
     setSubmitLoading(true);
     studentApi.submitComposedAssessment(
       buildAssessmentSubmitPayload(
-        composedData.questions,
+        skillAssessmentSession.questions,
         selectedAnswers,
-        composedData.submission_token
+        skillAssessmentSession.submission_token
       )
     )
       .then((res) => {
         setPendingResult(res.data);
         setResultReviewing(true);
-        setAttemptCount((c) => c + 1);
         if (res.data.percentage >= PASSING_PERCENT) {
           setAssessmentPassed(true);
           setLastAttempt(res.data);
@@ -523,7 +519,7 @@ function StudentDashboard() {
 
   const handleBackToDashboard = () => {
     setAssessmentView('idle');
-    setComposedData(null);
+    setSkillAssessmentSession(null);
     setResult(null);
     setPendingResult(null);
     setResultReviewing(false);
@@ -540,13 +536,13 @@ function StudentDashboard() {
   };
 
   const renderContent = () => {
-    if (assessmentView === 'intro' && composedData) {
+    if (assessmentView === 'intro' && skillAssessmentSession) {
       return (
         <AssessmentStartScreen
           onStart={handleStartQuiz}
           onBack={handleBackToDashboard}
-          attemptCount={composedData.attempt_count ?? 0}
-          maxAttempts={composedData.max_attempts ?? 2}
+          attemptCount={skillAssessmentSession.attempt_count ?? 0}
+          maxAttempts={skillAssessmentSession.max_attempts ?? 2}
         />
       );
     }
@@ -563,10 +559,10 @@ function StudentDashboard() {
         </div>
       );
     }
-    if (assessmentView === 'test' && composedData?.questions?.length) {
+    if (assessmentView === 'test' && skillAssessmentSession?.questions?.length) {
       return (
         <AssessmentQuizView
-          questions={composedData.questions}
+          questions={skillAssessmentSession.questions}
           selectedAnswers={selectedAnswers}
           onSelectAnswer={handleSelectAnswer}
           currentIndex={currentQuestionIndex}
@@ -586,12 +582,12 @@ function StudentDashboard() {
         />
       );
     }
-    const lastAttemptTargetIds = (lastAttempt?.test_domains ?? []).map((d) => d.id).sort().join(',');
+    const lastAttemptTargetIds = (lastAttempt?.test_domains ?? []).map((domain) => domain.id).sort().join(',');
     const hasRecommendationForCurrentDomains = Boolean(
       lastAttempt?.recommended_domains?.[0] && lastAttemptTargetIds === targetDomainKey
     );
 
-        switch (activeView) {
+    switch (activeView) {
       case 'dashboard':
         return (
           <StudentDashboardHome
@@ -606,6 +602,7 @@ function StudentDashboard() {
             tasksCompleted={taskStats.completed}
             onStartAssessment={handleStartAssessment}
             assessmentError={assessmentError}
+            onOpenProgress={() => setActiveView('progress')}
           />
         );
       case 'tasks':
@@ -616,15 +613,16 @@ function StudentDashboard() {
             onStatsChange={setTaskStats}
           />
         );
-      case 'portfolio':
-        return <StudentPortfolioPlaceholder />;
+      case 'chat':
+        return <MentorStudentChatTab role="student" />;
+      case 'progress':
+        return <StudentMyProgressSection />;
       case 'profile':
         return (
           <div className="dashboard-section">
             <h1 style={{ marginBottom: '0.25rem', color: '#111827', fontSize: '1.5rem' }}>Profile</h1>
             <p className="section-desc" style={{ marginBottom: '1.5rem', color: '#6b7280', fontSize: '0.875rem' }}>View and update your profile and target domains.</p>
 
-            {/* Profile data card */}
             <div className="info-card" style={{ marginBottom: '1.5rem', padding: '1.25rem 1.5rem', background: 'white', borderRadius: 12, border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
               <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem', fontWeight: 600, color: '#111827', borderBottom: '1px solid #e5e7eb', paddingBottom: '0.5rem' }}>Your information</h3>
               <div style={{ display: 'grid', gap: '0.75rem', fontSize: '0.875rem' }}>
@@ -664,12 +662,11 @@ function StudentDashboard() {
               </div>
             </div>
 
-            {/* Edit target domains */}
             <h3 style={{ marginBottom: '0.75rem', fontSize: '1rem', fontWeight: 600, color: '#111827' }}>Edit target domains</h3>
             <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '1rem' }}>Select 2 to 3 domains to take the skill assessment.</p>
             <SelectDomainsCard
               refreshUser={refreshUser}
-              initialSelectedIds={user?.student_profile?.target_domains?.map((d) => d.id) ?? []}
+              initialSelectedIds={user?.student_profile?.target_domains?.map((domain) => domain.id) ?? []}
               onSaved={() => loadAttempts()}
             />
             <button type="button" onClick={() => setActiveView('dashboard')} style={{ marginTop: '1.5rem', padding: '0.5rem 1rem', border: '1px solid #e5e7eb', background: 'white', borderRadius: 8, cursor: 'pointer', color: '#374151', fontSize: '0.875rem' }}>
@@ -691,6 +688,7 @@ function StudentDashboard() {
             tasksCompleted={taskStats.completed}
             onStartAssessment={handleStartAssessment}
             assessmentError={assessmentError}
+            onOpenProgress={() => setActiveView('progress')}
           />
         );
     }
@@ -698,7 +696,6 @@ function StudentDashboard() {
 
   return (
     <div className="dashboard-container student-dashboard">
-      {/* Top Navbar */}
       <nav className="dashboard-nav">
         <div className="student-dashboard-nav">
           <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
@@ -763,7 +760,6 @@ function StudentDashboard() {
         </div>
       </nav>
 
-      {/* Main content */}
       <div
         className={`dashboard-content ${['intro', 'test', 'result'].includes(assessmentView) ? 'assessment-active' : ''}`}
       >
@@ -775,7 +771,7 @@ function StudentDashboard() {
   );
 }
 
-function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, lastAttempt, hasRecommendationForCurrentDomains = false, attemptCount, attemptCountLabel = 'used', maxAttemptsPerDay = 2, tasksCompleted = 0, onStartAssessment, assessmentError }) {
+function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, lastAttempt, hasRecommendationForCurrentDomains = false, attemptCount, attemptCountLabel = 'used', maxAttemptsPerDay = 2, tasksCompleted = 0, onStartAssessment, assessmentError, onOpenProgress }) {
   const recommendedDomain = lastAttempt?.recommended_domains?.[0];
   const lastAttemptPassed = lastAttempt
     ? (lastAttempt.score / (lastAttempt.total_points || 1)) * 100 >= PASSING_PERCENT
@@ -785,7 +781,6 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
 
   return (
     <div className="dashboard-section">
-      {/* Welcome card – separate target domains (chosen) vs recommended domain (from assessment) */}
       <div className="welcome-card">
         <h2>Welcome back, {studentName}!</h2>
         <p>
@@ -826,9 +821,6 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
         </div>
       )}
 
-      <StudentGrowthDashboard />
-
-      {/* Assessment block – Start Assessment when no recommendation for current domains; Assessment Passed when we have one */}
       {targetDomains.length < 2 ? (
         <div className="assessment-cta-block">
           <div className="assessment-cta-inner">
@@ -904,7 +896,8 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
         </div>
       )}
 
-      {/* Tasks – unlocked only when we have a recommendation for current target domains */}
+      <StudentGrowthDashboard />
+
       {hasRecommendationForCurrentDomains ? (
         <div className="tasks-section-card">
           <div className="tasks-section-header">
@@ -931,7 +924,6 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
         </div>
       )}
 
-      {/* Progress summary */}
       <div className="progress-cards-grid">
         <div className="progress-card">
           <div className="progress-icon" style={{ background: '#ccfbf1', color: '#0f766e' }}><TargetIcon className="w-6 h-6" /></div>
@@ -956,30 +948,17 @@ function StudentDashboardHome({ studentName, targetDomains, assessmentPassed, la
         </div>
       </div>
 
-      {/* Quick links */}
       <div className="quick-links-card">
         <h3>Quick Links</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
-          <button type="button" className="quick-link-btn">
-            <div className="quick-link-icon"><FolderOpenIcon className="w-5 h-5" /></div>
+          <button type="button" className="quick-link-btn" onClick={onOpenProgress}>
+            <div className="quick-link-icon"><BarChartIcon className="w-5 h-5" /></div>
             <div>
-              <div className="quick-link-title">View Portfolio</div>
-              <div className="quick-link-desc">Showcase your work</div>
+              <div className="quick-link-title">My Progress</div>
+              <div className="quick-link-desc">Scores and projects by domain</div>
             </div>
           </button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function StudentPortfolioPlaceholder() {
-  return (
-    <div className="dashboard-section">
-      <h1>My Portfolio</h1>
-      <p className="section-desc">Showcase completed projects (FR6).</p>
-      <div className="info-card">
-        <p>Portfolio items from completed projects will appear here. Connect API when ready.</p>
       </div>
     </div>
   );

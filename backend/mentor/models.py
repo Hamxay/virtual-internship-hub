@@ -1,1 +1,1 @@
-# FR5: No models in this app — use projects + accounts via imports in views.
+# No models here; mentor data lives in ``projects`` and ``accounts``.

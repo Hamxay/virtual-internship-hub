@@ -1,13 +1,11 @@
-"""
-FR9 analytics: domain-centric student scores and skill progression aggregates.
-"""
+"""Admin analytics builders: domain score grids, cohort trends, audit CSV."""
 import csv
 from collections import defaultdict
 from io import StringIO
 
 from django.db.models import Prefetch
 
-from accounts.models import Domain, User
+from accounts.models import Domain, StudentProfile, User
 from assessments.models import StudentAssessmentAttempt
 from projects.models import (
     ProjectSubmission,
@@ -34,7 +32,10 @@ def get_student_domain_scores():
     """
     One object per student: scores keyed by official Domain.name only (from project template FK).
     Domains with no completed scored work in that domain are JSON null (not 0).
-    overall_average is the mean of only non-null domain scores, or null if none.
+    overall_average is the mean of only non-null domain scores (any domain), or null if none.
+
+    Also includes chosen_domains (sorted official domain names from the student's profile target_domains)
+    and chosen_domains_average (mean of scores in those chosen domains only, among domains with data).
     """
     official = get_official_domain_names()
     official_set = set(official)
@@ -43,6 +44,17 @@ def get_student_domain_scores():
         return []
 
     student_ids = [s.id for s in students]
+
+    chosen_by_student = {}
+    profiles = (
+        StudentProfile.objects.filter(user_id__in=student_ids)
+        .prefetch_related('target_domains')
+    )
+    for prof in profiles:
+        chosen_by_student[prof.user_id] = sorted(
+            d.name for d in prof.target_domains.all() if d.name in official_set
+        )
+
     submissions = (
         ProjectSubmission.objects.filter(
             assignment__status='COMPLETED',
@@ -92,6 +104,17 @@ def get_student_domain_scores():
                 active_vals.append(v)
             else:
                 row[d_name] = None
+        chosen = chosen_by_student.get(st.id, [])
+        row['chosen_domains'] = chosen
+        chosen_scores = [row[d] for d in chosen if row.get(d) is not None]
+        if chosen_scores:
+            row['chosen_domains_average'] = round(
+                sum(chosen_scores) / len(chosen_scores),
+                2,
+            )
+        else:
+            row['chosen_domains_average'] = None
+
         if active_vals:
             row['overall_average'] = round(sum(active_vals) / len(active_vals), 2)
             timeline = sorted(timeline_scores_by_student.get(st.id, []), key=lambda t: (t[0], t[1]))
@@ -242,9 +265,7 @@ def get_platform_kpis():
 
 
 def build_audit_csv_text():
-    """
-    FR8 audit export: one row per submission evaluation (AI score + mentor review state).
-    """
+    """CSV rows: one line per submission evaluation (scores + mentor state)."""
     buf = StringIO()
     writer = csv.writer(buf)
     writer.writerow(

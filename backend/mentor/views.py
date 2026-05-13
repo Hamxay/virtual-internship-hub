@@ -14,9 +14,7 @@ from .serializers import MentorQueueSubmissionSerializer, MentorReviewActionSeri
 
 
 class MentorQueueView(APIView):
-    """
-    FR5 — Submissions needing mentor attention in the mentor's expertise domain.
-    """
+    """Submissions in the mentor's expertise domain that need review."""
 
     permission_classes = [permissions.IsAuthenticated, IsMentor]
 
@@ -57,10 +55,7 @@ class MentorQueueView(APIView):
 
 
 class MentorReviewActionView(APIView):
-    """
-    FR5 — Record mentor feedback and resolve assignment (approve → completed, else needs revision).
-    Accepts POST or PATCH with the same JSON body.
-    """
+    """Approve or send back a submission (POST or PATCH, same body)."""
 
     permission_classes = [permissions.IsAuthenticated, IsMentor]
 
