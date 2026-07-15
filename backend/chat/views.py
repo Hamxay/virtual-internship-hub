@@ -9,8 +9,8 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.permissions import IsStudent
-from accounts.models import User
+from accounts.permissions import IsStudent, IsMentor
+from accounts.models import User, StudentProfile
 
 from .models import (
     ChatMessage,
@@ -29,6 +29,7 @@ from .serializers import (
     MentorStudentMessageCreateSerializer,
     MentorStudentMessageSerializer,
     EligibleMentorSerializer,
+    EligibleStudentSerializer,
 )
 from .scope import OFF_SCOPE_COACH_REPLY, user_message_in_career_scope
 from .utils import build_career_coach_prompt, run_career_coach
@@ -153,6 +154,35 @@ def _eligible_mentors_for_student(user):
     ).select_related('mentor_profile', 'mentor_profile__expertise_domain').order_by('username', 'id')
 
 
+def _eligible_students_for_mentor(user):
+    profile = getattr(user, 'mentor_profile', None)
+    if not profile or not profile.expertise_domain_id:
+        return StudentProfile.objects.none()
+    return (
+        StudentProfile.objects.filter(target_domains=profile.expertise_domain)
+        .select_related('user')
+        .prefetch_related('target_domains')
+        .distinct()
+        .order_by('user__username', 'user_id')
+    )
+
+
+class EligibleStudentListView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsMentor]
+
+    def get(self, request):
+        students = _eligible_students_for_mentor(request.user)
+        payload = [
+            {
+                'student_id': student.user_id,
+                'username': student.user.username,
+                'domain_names': list(student.target_domains.values_list('name', flat=True)),
+            }
+            for student in students
+        ]
+        return Response(EligibleStudentSerializer(payload, many=True).data, status=status.HTTP_200_OK)
+
+
 class EligibleMentorListView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsStudent]
 
@@ -175,34 +205,66 @@ class EligibleMentorListView(APIView):
 
 
 class MentorStudentConversationStartView(APIView):
-    permission_classes = [permissions.IsAuthenticated, IsStudent]
+    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
         serializer = MentorStudentConversationStartSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        mentor_id = serializer.validated_data['mentor_id']
-        mentor = get_object_or_404(User.objects.select_related('mentor_profile', 'mentor_profile__expertise_domain'), pk=mentor_id, role='MENTOR')
-        if not getattr(mentor, 'mentor_profile', None) or not mentor.mentor_profile.is_available:
-            return Response({'detail': 'Selected mentor is not available.'}, status=status.HTTP_409_CONFLICT)
+        mentor_id = serializer.validated_data.get('mentor_id')
+        student_id = serializer.validated_data.get('student_id')
 
-        profile = getattr(request.user, 'student_profile', None)
-        target_domain_ids = set(profile.target_domains.values_list('id', flat=True)) if profile else set()
-        if mentor.mentor_profile.expertise_domain_id not in target_domain_ids:
-            return Response(
-                {'detail': 'Selected mentor must match one of your target domains.'},
-                status=status.HTTP_403_FORBIDDEN,
+        if request.user.is_student:
+            if not mentor_id:
+                return Response({'detail': 'mentor_id is required for students.'}, status=status.HTTP_400_BAD_REQUEST)
+            mentor = get_object_or_404(
+                User.objects.select_related('mentor_profile', 'mentor_profile__expertise_domain'),
+                pk=mentor_id,
+                role='MENTOR',
             )
+            if not getattr(mentor, 'mentor_profile', None) or not mentor.mentor_profile.is_available:
+                return Response({'detail': 'Selected mentor is not available.'}, status=status.HTTP_409_CONFLICT)
+
+            profile = getattr(request.user, 'student_profile', None)
+            target_domain_ids = set(profile.target_domains.values_list('id', flat=True)) if profile else set()
+            if mentor.mentor_profile.expertise_domain_id not in target_domain_ids:
+                return Response(
+                    {'detail': 'Selected mentor must match one of your target domains.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            student = request.user
+        elif request.user.is_mentor:
+            if not student_id:
+                return Response({'detail': 'student_id is required for mentors.'}, status=status.HTTP_400_BAD_REQUEST)
+            mentor = request.user
+            mentor_profile = getattr(mentor, 'mentor_profile', None)
+            if not mentor_profile or not mentor_profile.expertise_domain_id:
+                return Response({'detail': 'Set your expertise domain in Profile before starting chats.'}, status=status.HTTP_409_CONFLICT)
+            student_user = get_object_or_404(User, pk=student_id, role='STUDENT')
+            student_profile = getattr(student_user, 'student_profile', None)
+            if not student_profile:
+                return Response({'detail': 'Selected student profile not found.'}, status=status.HTTP_404_NOT_FOUND)
+            eligible_ids = set(
+                _eligible_students_for_mentor(mentor).values_list('user_id', flat=True)
+            )
+            if student_user.id not in eligible_ids:
+                return Response(
+                    {'detail': 'Selected student must have your expertise domain as a target domain.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            student = student_user
+        else:
+            return Response({'detail': 'Only students and mentors can start chats.'}, status=status.HTTP_403_FORBIDDEN)
 
         conversation = (
             MentorStudentConversation.objects.filter(
-                student=request.user,
+                student=student,
                 mentor=mentor,
                 assignment__isnull=True,
             ).order_by('-updated_at', '-id').first()
         )
         if not conversation:
             conversation = MentorStudentConversation.objects.create(
-                student=request.user,
+                student=student,
                 mentor=mentor,
                 assignment=None,
             )

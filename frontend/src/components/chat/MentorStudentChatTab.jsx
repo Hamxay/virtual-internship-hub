@@ -17,7 +17,9 @@ export default function MentorStudentChatTab({ role = 'student' }) {
   const [selectedConversationId, setSelectedConversationId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [eligibleMentors, setEligibleMentors] = useState([]);
+  const [eligibleStudents, setEligibleStudents] = useState([]);
   const [mentorIdToStart, setMentorIdToStart] = useState('');
+  const [studentIdToStart, setStudentIdToStart] = useState('');
   const [loadingConversations, setLoadingConversations] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [startingConversation, setStartingConversation] = useState(false);
@@ -72,6 +74,17 @@ export default function MentorStudentChatTab({ role = 'student' }) {
   }, [isStudent]);
 
   useEffect(() => {
+    if (isStudent) return;
+    mentorStudentChatApi.getEligibleStudents()
+      .then((res) => {
+        const rows = Array.isArray(res?.data) ? res.data : [];
+        setEligibleStudents(rows);
+        if (rows.length > 0) setStudentIdToStart(String(rows[0].student_id));
+      })
+      .catch(() => {});
+  }, [isStudent]);
+
+  useEffect(() => {
     loadMessages(selectedConversationId, { silent: false });
   }, [selectedConversationId, loadMessages]);
 
@@ -96,11 +109,14 @@ export default function MentorStudentChatTab({ role = 'student' }) {
   );
 
   const handleStartConversation = async () => {
-    if (!mentorIdToStart) return;
+    const startPayload = isStudent
+      ? { mentor_id: Number(mentorIdToStart) }
+      : { student_id: Number(studentIdToStart) };
+    if (isStudent ? !mentorIdToStart : !studentIdToStart) return;
     setStartingConversation(true);
     setError('');
     try {
-      const { data } = await mentorStudentChatApi.startConversation(Number(mentorIdToStart));
+      const { data } = await mentorStudentChatApi.startConversation(startPayload);
       await loadConversations();
       setSelectedConversationId(data?.id || null);
     } catch (err) {
@@ -145,7 +161,7 @@ export default function MentorStudentChatTab({ role = 'student' }) {
         <p className="section-desc">
           {isStudent
             ? 'Choose a mentor from your target domains and start a general chat.'
-            : 'Reply to students and guide them through revisions.'}
+            : 'Choose a student from your expertise domain and start a general chat.'}
         </p>
       </div>
 
@@ -179,6 +195,42 @@ export default function MentorStudentChatTab({ role = 'student' }) {
             className="btn-primary-green"
             onClick={handleStartConversation}
             disabled={startingConversation || !mentorIdToStart}
+          >
+            {startingConversation ? 'Opening...' : 'Start chat'}
+          </button>
+        </div>
+      )}
+
+      {mentorMode && (
+        <div
+          className="info-card info-card--plain"
+          style={{
+            display: 'flex',
+            gap: '0.75rem',
+            alignItems: 'center',
+            background: '#f8fafc',
+            border: '1px solid #cbd5e1',
+            borderRadius: 12,
+          }}
+        >
+          <select
+            value={studentIdToStart}
+            onChange={(e) => setStudentIdToStart(e.target.value)}
+            style={{ flex: 1, minWidth: 220 }}
+          >
+            <option value="">Select student</option>
+            {eligibleStudents.map((student) => (
+              <option key={student.student_id} value={student.student_id}>
+                {student.username}
+                {student.domain_names?.length ? ` (${student.domain_names.join(', ')})` : ''}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="btn-primary-green"
+            onClick={handleStartConversation}
+            disabled={startingConversation || !studentIdToStart}
           >
             {startingConversation ? 'Opening...' : 'Start chat'}
           </button>
@@ -247,7 +299,9 @@ export default function MentorStudentChatTab({ role = 'student' }) {
           style={{
             display: 'flex',
             flexDirection: 'column',
+            height: 520,
             minHeight: 520,
+            overflow: 'hidden',
             background: mentorMode ? '#e0e7ff' : '#f0f9ff',
             border: mentorMode ? '1px solid #c7d2fe' : '1px solid #bfdbfe',
             borderRadius: 12,
@@ -273,6 +327,7 @@ export default function MentorStudentChatTab({ role = 'student' }) {
               <div
                 style={{
                   flex: 1,
+                  minHeight: 0,
                   overflowY: 'auto',
                   paddingRight: '0.25rem',
                   background: '#ffffff',
@@ -324,6 +379,7 @@ export default function MentorStudentChatTab({ role = 'student' }) {
                   display: 'flex',
                   gap: '0.5rem',
                   marginTop: '0.75rem',
+                  flexShrink: 0,
                   background: '#ffffff',
                   border: mentorMode ? '1px solid #c7d2fe' : '1px solid #dbeafe',
                   borderRadius: 10,

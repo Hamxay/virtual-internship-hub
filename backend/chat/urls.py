@@ -5,6 +5,7 @@ from .views import (
     ChatSessionListView,
     ChatSessionMessagesListView,
     EligibleMentorListView,
+    EligibleStudentListView,
     MentorStudentConversationStartView,
     MentorStudentConversationListView,
     MentorStudentMessageListCreateView,
@@ -15,6 +16,11 @@ urlpatterns = [
         'chat/mentor/eligible-mentors/',
         EligibleMentorListView.as_view(),
         name='mentor-student-eligible-mentor-list',
+    ),
+    path(
+        'chat/mentor/eligible-students/',
+        EligibleStudentListView.as_view(),
+        name='mentor-student-eligible-student-list',
     ),
     path(
         'chat/mentor/conversations/start/',

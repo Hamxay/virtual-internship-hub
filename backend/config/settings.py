@@ -396,7 +396,7 @@ OPENROUTER_API_KEY = config('OPENROUTER_API_KEY', default='')
 OPENROUTER_BASE_URL = config('OPENROUTER_BASE_URL', default='https://openrouter.ai/api/v1').rstrip('/')
 OPENROUTER_CHAT_MODEL = config(
     'OPENROUTER_CHAT_MODEL',
-    default='openai/gpt-oss-120b:free',
+    default='openrouter/free',
 )
 OPENROUTER_PROJECT_EVAL_MODEL = config(
     'OPENROUTER_PROJECT_EVAL_MODEL',

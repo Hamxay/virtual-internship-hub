@@ -159,7 +159,17 @@ class MentorStudentConversationSerializer(serializers.ModelSerializer):
 
 
 class MentorStudentConversationStartSerializer(serializers.Serializer):
-    mentor_id = serializers.IntegerField()
+    mentor_id = serializers.IntegerField(required=False)
+    student_id = serializers.IntegerField(required=False)
+
+    def validate(self, attrs):
+        mentor_id = attrs.get('mentor_id')
+        student_id = attrs.get('student_id')
+        if mentor_id and student_id:
+            raise serializers.ValidationError('Provide either mentor_id or student_id, not both.')
+        if not mentor_id and not student_id:
+            raise serializers.ValidationError('mentor_id or student_id is required.')
+        return attrs
 
 
 class MentorStudentMessageCreateSerializer(serializers.Serializer):
@@ -177,3 +187,9 @@ class EligibleMentorSerializer(serializers.Serializer):
     username = serializers.CharField()
     expertise_domain_id = serializers.IntegerField(allow_null=True)
     expertise_domain_name = serializers.CharField(allow_blank=True)
+
+
+class EligibleStudentSerializer(serializers.Serializer):
+    student_id = serializers.IntegerField()
+    username = serializers.CharField()
+    domain_names = serializers.ListField(child=serializers.CharField(), allow_empty=True)

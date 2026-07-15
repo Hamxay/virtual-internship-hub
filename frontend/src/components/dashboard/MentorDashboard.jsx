@@ -8,6 +8,7 @@ import Navbar from '../layout/Navbar';
 import MentorTriageDashboard from '../mentor/MentorTriageDashboard';
 import ReviewQueue from '../mentor/ReviewQueue';
 import MentorStudentChatTab from '../chat/MentorStudentChatTab';
+import './Dashboard.css';
 
 const TAB = {
   STUDENTS: 'students',

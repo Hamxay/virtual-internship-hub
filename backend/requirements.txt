@@ -23,4 +23,5 @@ openpyxl>=3.1.0
 pypdf>=4.0.0
 requests>=2.31.0
 copyleaks
+watchdog>=4.0.0
 

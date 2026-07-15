@@ -89,6 +89,7 @@ export default function Navbar({ variant = 'light' }) {
               || text.includes('submitted')
               || text.includes('ai evaluation')
               || text.includes('plagiarism')
+              || text.includes('chat message')
             );
           })
         : notifications,
@@ -209,7 +210,7 @@ export default function Navbar({ variant = 'light' }) {
             {showReadHistory
               ? 'Including read items from your recent history.'
               : effectiveReviewOnly
-                ? 'New items only (review-focused). Change filter in Profile settings.'
+                ? 'New items only (review and chat). Change filter in Profile settings.'
                 : 'New items only — use “Show read” below for history.'}
           </div>
 
